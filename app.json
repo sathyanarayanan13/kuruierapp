@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "kuruier",
+    "slug": "kuruier",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "myapp",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.sathya131626.kuruier"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/kuruier.png",
+          "backgroundColor": "#162BEB",
+          "imageWidth": 150
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": ["node_modules/@expo-google-fonts/open-sans/600SemiBold/OpenSans_600SemiBold.ttf",
+            "node_modules/@expo-google-fonts/open-sans/400Regular/OpenSans_400Regular.ttf",
+            "node_modules/@expo-google-fonts/open-sans/700Bold/OpenSans_700Bold.ttf",
+            "node_modules/@expo-google-fonts/open-sans/800ExtraBold/OpenSans_800ExtraBold.ttf",
+            "node_modules/@expo-google-fonts/open-sans/300Light/OpenSans_300Light.ttf",
+            "node_modules/@expo-google-fonts/open-sans/500Medium/OpenSans_500Medium.ttf"]
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "android": {
+      "package": "com.sathya131626.kuruier",
+      "version": "1.0.2",
+      "versionCode": 2
+    }
+  }
+}
