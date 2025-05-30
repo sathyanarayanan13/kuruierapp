@@ -7,6 +7,7 @@ import {
   ImageBackground,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef, useState, useEffect } from 'react';
@@ -16,16 +17,18 @@ import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
 import VerificationPopup from '@/components/VerificationPopup';
 import BackButton from '@/assets/svgs/BackButton';
-
-const VALID_OTP = '1234';
+import { verifyOtp, resendOtp } from '@/utils/api';
+import { validateOtp } from '@/utils/validation';
 
 export default function VerifyScreen() {
   const [otp, setOtp] = useState(['', '', '', '']);
   const [showPopup, setShowPopup] = useState(false);
   const [verificationSuccess, setVerificationSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
   const inputRefs = useRef<TextInput[]>([]);
   const router = useRouter();
-  const { mobile } = useLocalSearchParams();
+  const { mobile, userId } = useLocalSearchParams();
 
   const handleOtpChange = (value: string, index: number) => {
     if (value.length > 1) {
@@ -49,30 +52,57 @@ export default function VerifyScreen() {
     }
   };
 
-  const handleSubmit = () => {
-    const enteredOtp = otp.join('');
-    const success = enteredOtp === VALID_OTP;
-    setVerificationSuccess(success);
-    setShowPopup(true);
-    
+  const handleSubmit = async () => {
+    try {
+      const enteredOtp = otp.join('');
+      
+      if (!validateOtp(enteredOtp)) {
+        Alert.alert('Error', 'Please enter a valid 4-digit OTP');
+        return;
+      }
+
+      setLoading(true);
+      const response = await verifyOtp(userId as string, enteredOtp);
+      
+      setVerificationSuccess(true);
+      setShowPopup(true);
+
+      // Navigate based on user role
+      if (response.user.currentRole === 'SHIPMENT_OWNER') {
+        router.replace('/travelers-list');
+      } else {
+        router.replace('/courier-list');
+      }
+    } catch (error: any) {
+      setVerificationSuccess(false);
+      setShowPopup(true);
+      Alert.alert('Error', error.message || 'Failed to verify OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    try {
+      setResendLoading(true);
+      await resendOtp(userId as string);
+      Alert.alert('Success', 'New OTP sent successfully');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to resend OTP. Please try again.');
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  const handleChangeMobile = () => {
+    router.back();
   };
 
   useEffect(() => {
     setTimeout(() => {
       setShowPopup(false);
-      if (verificationSuccess) {
-        router.replace('/user-type');
-      }
     }, 1500);
   }, [verificationSuccess]);
-
-  const handlePopupClose = () => {
-    setShowPopup(false);
-    if (verificationSuccess) {
-      // Navigate to user type selection
-      router.replace('/user-type');
-    }
-  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -143,10 +173,15 @@ export default function VerifyScreen() {
             </View>
 
             <View style={styles.actions}>
-              <TouchableOpacity>
-                <Text style={styles.actionLink}>Resend OTP</Text>
+              <TouchableOpacity 
+                onPress={handleResendOtp}
+                disabled={resendLoading}
+              >
+                <Text style={[styles.actionLink, resendLoading && styles.actionLinkDisabled]}>
+                  {resendLoading ? 'Sending...' : 'Resend OTP'}
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={handleChangeMobile}>
                 <Text style={styles.actionLink}>Change Mobile Number</Text>
               </TouchableOpacity>
             </View>
@@ -158,25 +193,23 @@ export default function VerifyScreen() {
             style={[
               styles.submitButton,
               otp.every((digit) => digit !== '') && styles.submitButtonActive,
+              loading && styles.submitButtonDisabled,
             ]}
-            disabled={!otp.every((digit) => digit !== '')}
+            disabled={!otp.every((digit) => digit !== '') || loading}
             onPress={handleSubmit}
           >
             <Text style={styles.submitButtonText} color="secondary" semiBold>
-              Submit
+              {loading ? 'Verifying...' : 'Submit'}
             </Text>
           </TouchableOpacity>
         </View>
-
       </ScrollView>
-
-      
 
       <VerificationPopup
         visible={showPopup}
         success={verificationSuccess}
         message={verificationSuccess ? 'Verified Successfully' : 'Invalid OTP'}
-        onClose={handlePopupClose}
+        onClose={() => setShowPopup(false)}
       />
     </SafeAreaView>
   );
@@ -343,5 +376,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+  },
+  submitButtonDisabled: {
+    opacity: 0.7,
+  },
+  actionLinkDisabled: {
+    opacity: 0.7,
   },
 });

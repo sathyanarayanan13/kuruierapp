@@ -7,6 +7,7 @@ import {
   ImageBackground,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -18,6 +19,8 @@ import Phone from '@/assets/svgs/Phone';
 import Eye from '@/assets/svgs/EyeIcon';
 import People from '@/assets/svgs/People';
 import Mail from '@/assets/svgs/Mail';
+import { signup } from '@/utils/api';
+import { validateName, validateMobileNumber, validateEmail, validatePassword } from '@/utils/validation';
 
 export default function SignupScreen() {
   const [name, setName] = useState('');
@@ -25,15 +28,48 @@ export default function SignupScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleSignup = () => {
-    // Here you would typically validate the form and make an API call
-    // For now, we'll just navigate to the verification screen
-    router.push({
-      pathname: '/verify',
-      params: { mobile },
-    });
+  const handleSignup = async () => {
+    try {
+      // Validate inputs
+      if (!validateName(name)) {
+        Alert.alert('Error', 'Name should only contain letters and spaces');
+        return;
+      }
+
+      if (!validateMobileNumber(mobile)) {
+        Alert.alert('Error', 'Please enter a valid 10-digit mobile number');
+        return;
+      }
+
+      if (!validateEmail(email)) {
+        Alert.alert('Error', 'Please enter a valid email address');
+        return;
+      }
+
+      if (!validatePassword(password)) {
+        Alert.alert('Error', 'Password must be at least 8 characters long');
+        return;
+      }
+
+      setLoading(true);
+      const response = await signup(name, email, mobile, password);
+      
+      // Navigate to verification screen with userId
+      router.push({
+        pathname: '/verify',
+        params: { 
+          mobile,
+          userId: response.userId
+        },
+      });
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to sign up. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -83,6 +119,7 @@ export default function SignupScreen() {
                 placeholderTextColor="#999"
                 value={name}
                 onChangeText={setName}
+                autoCapitalize="words"
               />
               <People
                 size={20}
@@ -104,6 +141,7 @@ export default function SignupScreen() {
                 value={mobile}
                 onChangeText={setMobile}
                 keyboardType="phone-pad"
+                maxLength={10}
               />
               <Phone width={20} height={19} />
             </View>
@@ -162,14 +200,17 @@ export default function SignupScreen() {
         </View>
 
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.signupButton} onPress={handleSignup}>
+          <TouchableOpacity 
+            style={[styles.signupButton, loading && styles.signupButtonDisabled]} 
+            onPress={handleSignup}
+            disabled={loading}
+          >
             <Text style={styles.signupButtonText} color="secondary" semiBold>
-              Sign Up
+              {loading ? 'Signing up...' : 'Sign Up'}
             </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
-      
     </SafeAreaView>
   );
 }
@@ -329,5 +370,8 @@ const styles = StyleSheet.create({
   signupButtonText: {
     fontSize: 16,
     fontFamily: 'OpenSans_500Medium',
+  },
+  signupButtonDisabled: {
+    opacity: 0.7,
   },
 });

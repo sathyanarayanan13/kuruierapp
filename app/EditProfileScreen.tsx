@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput, Platform, Image, ImageBackground } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, TouchableOpacity, TextInput, Platform, Image, ImageBackground, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
 import BackButton from '@/assets/svgs/BackButton';
@@ -11,34 +11,57 @@ import Phone from '@/assets/svgs/Phone'; // Using existing Phone icon
 import PersonIcon from '@/assets/svgs/People'; // Placeholder, replace with actual Person icon if needed
 import CheckmarkIcon from '@/assets/svgs/AddIcon'; // Placeholder, replace with actual Checkmark icon if needed
 import { Check } from 'lucide-react-native';
+import { updateProfile } from '@/utils/api';
+import { validateName, validateMobileNumber, validateEmail } from '@/utils/validation';
 // Placeholder images for role illustrations
 const TravelerIllustration = require('@/assets/images/traveller.png'); // Replace with actual Traveller illustration
 const ShipmentOwnerIllustration = require('@/assets/images/owner.png'); // Replace with actual Shipment Owner illustration
 
-interface EditProfileScreenProps {
-  onBack: () => void; // Callback function to handle going back
-}
+export default function EditProfileScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const initialData = params.initialData ? JSON.parse(params.initialData as string) : null;
 
-const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ onBack }) => {
-  const router = useRouter(); // Keep useRouter if you need navigation for other purposes within the component
-  const [name, setName] = useState('Sanjai Kumar');
-  const [mobile, setMobile] = useState('8825488514');
-  const [mail, setMail] = useState('sanjai.s@zohocorp.com');
-  const [selectedRole, setSelectedRole] = useState('Shipment Owner'); // State to manage selected role
+  const [name, setName] = useState(initialData?.username || '');
+  const [mobile, setMobile] = useState(initialData?.mobileNumber || '');
+  const [mail, setMail] = useState(initialData?.email || '');
+  const [selectedRole, setSelectedRole] = useState(initialData?.currentRole || 'SHIPMENT_OWNER');
+  const [loading, setLoading] = useState(false);
 
-  const handleUpdateDetails = () => {
-    // TODO: Implement update profile logic
-    console.log('Update Details Pressed');
-    console.log('Name:', name);
-    console.log('Mobile:', mobile);
-    console.log('Mail:', mail);
-    console.log('Role:', selectedRole);
-    // After updating, you might want to call onBack()
-    // onBack();
-    router.back();
+  const handleUpdateDetails = async () => {
+    try {
+      // Validate inputs
+      if (!validateName(name)) {
+        Alert.alert('Error', 'Name should only contain letters and spaces');
+        return;
+      }
+
+      if (!validateMobileNumber(mobile)) {
+        Alert.alert('Error', 'Please enter a valid 10-digit mobile number');
+        return;
+      }
+
+      if (!validateEmail(mail)) {
+        Alert.alert('Error', 'Please enter a valid email address');
+        return;
+      }
+
+      setLoading(true);
+      await updateProfile(name, mail, mobile, selectedRole);
+      Alert.alert('Success', 'Profile updated successfully', [
+        {
+          text: 'OK',
+          onPress: () => router.back()
+        }
+      ]);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleRoleSelect = (role: string) => {
+  const handleRoleSelect = (role: 'SHIPMENT_OWNER' | 'TRAVELLER') => {
     setSelectedRole(role);
   };
 
@@ -94,6 +117,7 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ onBack }) => {
                 value={mobile}
                 onChangeText={setMobile}
                 keyboardType="phone-pad"
+                maxLength={10}
               />
               {/* Phone Icon */}
               <Phone width={20} color={Colors.text} opacity={0.6} />
@@ -111,6 +135,7 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ onBack }) => {
                 value={mail}
                 onChangeText={setMail}
                 keyboardType="email-address"
+                autoCapitalize="none"
               />
               {/* Mail Icon */}
               <Mail size={20} color={Colors.text} opacity={0.6} />
@@ -123,12 +148,12 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ onBack }) => {
           <View style={styles.roleCardsContainer}>
             {/* Traveler Card */}
             <TouchableOpacity 
-              style={[styles.roleCard, selectedRole === 'Traveller' && styles.selectedRoleCard]}
-              onPress={() => handleRoleSelect('Traveller')}
+              style={[styles.roleCard, selectedRole === 'TRAVELLER' && styles.selectedRoleCard]}
+              onPress={() => handleRoleSelect('TRAVELLER')}
             >
               <Image source={TravelerIllustration} style={styles.roleIllustration} resizeMode="contain" />
               <Text style={styles.roleCardText}>Traveller</Text>
-              {selectedRole === 'Traveller' && (
+              {selectedRole === 'TRAVELLER' && (
                 <View style={styles.checkmarkContainer}>
                   {/* Placeholder Checkmark Icon */}
                   <Check size={12} color={Colors.secondary} />
@@ -138,12 +163,12 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ onBack }) => {
 
             {/* Shipment Owner Card */}
             <TouchableOpacity 
-              style={[styles.roleCard, selectedRole === 'Shipment Owner' && styles.selectedRoleCard]}
-              onPress={() => handleRoleSelect('Shipment Owner')}
+              style={[styles.roleCard, selectedRole === 'SHIPMENT_OWNER' && styles.selectedRoleCard]}
+              onPress={() => handleRoleSelect('SHIPMENT_OWNER')}
             >
               <Image source={ShipmentOwnerIllustration} style={styles.roleIllustration} resizeMode="contain" />
               <Text style={styles.roleCardText}>Shipment Owner</Text>
-               {selectedRole === 'Shipment Owner' && (
+               {selectedRole === 'SHIPMENT_OWNER' && (
                 <View style={styles.checkmarkContainer}>
                    {/* Placeholder Checkmark Icon */}
                   <Check size={12} color={Colors.secondary} />
@@ -155,13 +180,19 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ onBack }) => {
         </View>
 
         {/* Update Details Button */}
-        <TouchableOpacity style={styles.updateButton} onPress={handleUpdateDetails}>
-          <Text style={styles.updateButtonText} color="secondary" semiBold>Update Details</Text>
+        <TouchableOpacity 
+          style={[styles.updateButton, loading && styles.updateButtonDisabled]} 
+          onPress={handleUpdateDetails}
+          disabled={loading}
+        >
+          <Text style={styles.updateButtonText} color="secondary" semiBold>
+            {loading ? 'Updating...' : 'Update Details'}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -314,10 +345,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  updateButtonDisabled: {
+    backgroundColor: Colors.disabled,
+  },
   updateButtonText: {
     fontSize: 18,
     fontFamily: 'OpenSans_600SemiBold'
   },
-});
-
-export default EditProfileScreen; 
+}); 

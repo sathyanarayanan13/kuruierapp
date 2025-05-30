@@ -9,6 +9,7 @@ import {
   ScrollView,
   Keyboard,
   TouchableWithoutFeedback,
+  Alert,
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -18,19 +19,42 @@ import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
 import Phone from '@/assets/svgs/Phone';
 import Eye from '@/assets/svgs/EyeIcon';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { login, isAuthenticated, getStoredUser } from '@/utils/api';
+import { validateMobileNumber, validatePassword } from '@/utils/validation';
 
 export default function LoginScreen() {
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const passwordInputRef = useRef<TextInput | null>(null);
-
   const router = useRouter();
 
-  const handleLogin = () => {
-    // For demo purposes, allow any login
-    router.replace('/user-type');
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  const checkAuthStatus = async () => {
+    try {
+      const isLoggedIn = await isAuthenticated();
+      if (isLoggedIn) {
+        const user = await getStoredUser();
+        if (user) {
+          if (user.currentRole === 'SHIPMENT_OWNER') {
+            router.replace('/travelers-list');
+          } else {
+            router.replace('/courier-list');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Auth check error:', error);
+    } finally {
+      setCheckingAuth(false);
+    }
   };
 
   useEffect(() => {
@@ -47,7 +71,6 @@ export default function LoginScreen() {
       }
     );
 
-    // Clean up listeners when component unmounts
     return () => {
       keyboardDidShowListener.remove();
       keyboardDidHideListener.remove();
@@ -58,110 +81,155 @@ export default function LoginScreen() {
     Keyboard.dismiss();
   };
 
+  const handleLogin = async () => {
+    try {
+      // Validate inputs
+      if (!validateMobileNumber(mobile)) {
+        Alert.alert('Error', 'Please enter a valid 10-digit mobile number');
+        return;
+      }
+
+      if (!validatePassword(password)) {
+        Alert.alert('Error', 'Password must be at least 8 characters long');
+        return;
+      }
+
+      setLoading(true);
+      const response = await login(mobile, password);
+      
+      if (response.user.currentRole === 'SHIPMENT_OWNER') {
+        router.replace('/travelers-list');
+      } else {
+        router.replace('/courier-list');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to login. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (checkingAuth) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <LoadingSpinner size={40} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.imageWrapper}>
-          <ImageBackground
-            source={require('@/assets/images/banner.png')}
-            style={styles.banner}
-            resizeMode="cover"
-          >
-            <View style={styles.header}>
-              <Image
-                source={require('@/assets/images/kuruier.png')}
-                style={styles.logo}
-                resizeMode="contain"
-              />
-              <View style={styles.headerText}>
-                <Text style={styles.greeting} color="secondary">
-                  Hey,{' '}
-                  <Text style={styles.appName} color="secondary" semiBold>
-                    Kuruier
-                  </Text>{' '}
-                  👋
-                </Text>
-                <Text style={styles.subtitle} color="secondary">
-                  Sign in to access to your account
-                </Text>
+      <TouchableWithoutFeedback onPress={dismissKeyboard}>
+        <View style={styles.container}>
+          <View style={styles.imageWrapper}>
+            <ImageBackground
+              source={require('@/assets/images/banner.png')}
+              style={styles.banner}
+              resizeMode="cover"
+            >
+              <View style={styles.header}>
+                <Image
+                  source={require('@/assets/images/kuruier.png')}
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
+                <View style={styles.headerText}>
+                  <Text style={styles.greeting} color="secondary">
+                    Hey,{' '}
+                    <Text style={styles.appName} color="secondary" semiBold>
+                      Kuruier
+                    </Text>{' '}
+                    👋
+                  </Text>
+                  <Text style={styles.subtitle} color="secondary">
+                    Sign in to access to your account
+                  </Text>
+                </View>
+              </View>
+            </ImageBackground>
+          </View>
+
+          <View style={styles.formContainer}>
+            <Text style={styles.formTitle} semiBold>
+              Login with your mobile & password
+            </Text>
+
+            <View style={styles.inputContainer}>
+              <Text style={[styles.label]}>
+                Mobile <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="ex : 1234567890"
+                  placeholderTextColor="#B0B0B0"
+                  value={mobile}
+                  onChangeText={setMobile}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  onSubmitEditing={() => {
+                    passwordInputRef?.current?.focus();
+                  }}
+                />
+                <View style={styles.iconWrapper}>
+                  <Phone width={20} height={19} />
+                </View>
               </View>
             </View>
-          </ImageBackground>
-        </View>
 
-        <View style={styles.formContainer}>
-          <Text style={styles.formTitle} semiBold>
-            Login with your mobile & password
-          </Text>
-
-          <View style={styles.inputContainer}>
-            <Text style={[styles.label]}>
-              Mobile <Text style={styles.required}>*</Text>
-            </Text>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="ex : 1234567890"
-                placeholderTextColor="#B0B0B0"
-                value={mobile}
-                onChangeText={setMobile}
-                keyboardType="phone-pad"
-                onSubmitEditing={() => {
-                  passwordInputRef?.current?.focus();
-                }}
-              />
-              <View style={styles.iconWrapper}>
-                <Phone width={20} height={19} />
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="ex : kuruvi@123"
+                  placeholderTextColor="#999"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  ref={passwordInputRef}
+                  onSubmitEditing={handleLogin}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.inputIcon}
+                >
+                  {showPassword ? (
+                    <EyeOff size={20} color={Colors.primary} />
+                  ) : (
+                    <Eye size={20} color={Colors.primary} />
+                  )}
+                </TouchableOpacity>
               </View>
             </View>
           </View>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="ex : kuruvi@123"
-                placeholderTextColor="#999"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                ref={passwordInputRef}
-                onSubmitEditing={() => handleLogin}
-              />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.inputIcon}
+          <View>
+            <Text style={styles.noAccount}>
+              Don't have a account?{' '}
+              <Link href="/signup" asChild>
+                <Text style={styles.signUpLink}>Sign Up</Text>
+              </Link>
+            </Text>
+          </View>
+
+          {!keyboardVisible && (
+            <View style={styles.footer}>
+              <TouchableOpacity 
+                style={[styles.loginButton, loading && styles.loginButtonDisabled]} 
+                onPress={handleLogin}
+                disabled={loading}
               >
-                {showPassword ? (
-                  <EyeOff size={20} color={Colors.primary} />
-                ) : (
-                  <Eye size={20} color={Colors.primary} />
-                )}
+                <Text style={styles.loginButtonText} color="secondary" semiBold>
+                  {loading ? 'Logging in...' : 'Login'}
+                </Text>
               </TouchableOpacity>
             </View>
-          </View>
+          )}
         </View>
-
-        <View>
-          <Text style={styles.noAccount}>
-            Don't have a account?{' '}
-            <Link href="/signup" asChild>
-              <Text style={styles.signUpLink}>Sign Up</Text>
-            </Link>
-          </Text>
-        </View>
-
-        {!keyboardVisible && (
-          <View style={styles.footer}>
-            <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-              <Text style={styles.loginButtonText} color="secondary" semiBold>
-                Login
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
+      </TouchableWithoutFeedback>
     </SafeAreaView>
   );
 }
@@ -318,5 +386,8 @@ const styles = StyleSheet.create({
   loginButtonText: {
     fontSize: 16,
     fontFamily: 'OpenSans_500Medium',
+  },
+  loginButtonDisabled: {
+    opacity: 0.7,
   },
 });
