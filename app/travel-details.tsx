@@ -7,6 +7,8 @@ import {
   TextInput,
   ImageBackground,
   Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
@@ -16,6 +18,8 @@ import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
 import Dropdown from '@/components/Dropdown';
 import DatePicker from '@/assets/svgs/DatePicker';
+import { createTrip } from '@/utils/api';
+import { useLocation } from '@/hooks/useLocation';
 
 const countries = ['UAE', 'USA', 'UK', 'India', 'Singapore'];
 
@@ -25,8 +29,11 @@ export default function TravelDetailsScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [fromCountry, setFromCountry] = useState('');
   const [toCountry, setToCountry] = useState('');
+  const [flightInfo, setFlightInfo] = useState('');
   const [availability, setAvailability] = useState<'yes' | 'maybe'>('yes');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
+  const location = useLocation();
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(Platform.OS === 'ios');
@@ -43,9 +50,70 @@ export default function TravelDetailsScreen() {
     }
   };
 
-  const handleNext = () => {
-    // Navigate to courier list
-    router.push('/courier-list');
+  const validateForm = () => {
+    if (!pnrNumber) {
+      Alert.alert('Error', 'Please enter PNR number');
+      return false;
+    }
+    if (!fromCountry) {
+      Alert.alert('Error', 'Please select departure country');
+      return false;
+    }
+    if (!toCountry) {
+      Alert.alert('Error', 'Please select destination country');
+      return false;
+    }
+    if (!flightInfo) {
+      Alert.alert('Error', 'Please enter flight information');
+      return false;
+    }
+    if (!location.latitude || !location.longitude) {
+      Alert.alert('Error', 'Please allow location access');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
+
+    try {
+      setIsSubmitting(true);
+      const response = await createTrip({
+        pnrNumber,
+        fromCountry,
+        toCountry,
+        departureDate: departureDate.toISOString().split('T')[0],
+        flightInfo,
+        lat_coordinates: location.latitude,
+        long_coordinates: location.longitude,
+      });
+
+      if (response) {
+        Alert.alert(
+          'Success',
+          'Trip created successfully',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                router.replace({
+                  pathname: '/(tabs)/shipments',
+                  params: { refresh: Date.now() }
+                });
+              }
+            }
+          ],
+          { cancelable: false }
+        );
+      } else {
+        Alert.alert('Error', 'Failed to create trip');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to create trip');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -147,6 +215,21 @@ export default function TravelDetailsScreen() {
             </View>
 
             <View style={styles.formGroup}>
+              <Text style={styles.label}>
+                Flight Information <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter flight information"
+                  placeholderTextColor="#999"
+                  value={flightInfo}
+                  onChangeText={setFlightInfo}
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
               <Text style={{fontFamily: 'OpenSans_500Medium'}}>Availability for shipment</Text>
               <View style={styles.radioGroup}>
                 <TouchableOpacity
@@ -173,12 +256,26 @@ export default function TravelDetailsScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {location.errorMsg && (
+              <Text style={styles.errorText}>
+                {location.errorMsg}
+              </Text>
+            )}
           </View>
 
-          <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-            <Text style={styles.nextButtonText} color="secondary" semiBold>
-              Next
-            </Text>
+          <TouchableOpacity 
+            style={[styles.nextButton, isSubmitting && styles.disabledButton]} 
+            onPress={handleSubmit}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color={Colors.secondary} />
+            ) : (
+              <Text style={styles.nextButtonText} color="secondary" semiBold>
+                Submit
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -358,5 +455,14 @@ const styles = StyleSheet.create({
   },
   nextButtonText: {
     fontSize: 16,
+  },
+  disabledButton: {
+    opacity: 0.7,
+  },
+  errorText: {
+    color: Colors.error,
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
   },
 });

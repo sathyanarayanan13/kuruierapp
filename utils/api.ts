@@ -62,6 +62,40 @@ interface CreateShipmentRequest {
   packageImage: any; 
 }
 
+interface Trip {
+  id: string;
+  userId: string;
+  pnrNumber: string;
+  fromCountry: string;
+  toCountry: string;
+  departureDate: string;
+  status: 'ACCEPTING' | 'IN_TRANSIT' | 'COMPLETED';
+  flightInfo: string;
+  lat_coordinates: string;
+  long_coordinates: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CreateTripRequest {
+  pnrNumber: string;
+  fromCountry: string;
+  toCountry: string;
+  departureDate: string;
+  flightInfo: string;
+  lat_coordinates: string;
+  long_coordinates: string;
+}
+
+interface CreateTripResponse {
+  success: boolean;
+  message: string;
+  data: {
+    trip: Trip;
+    matchingShipments: any[];
+  };
+}
+
 async function apiCall<T>(
   endpoint: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
@@ -229,5 +263,15 @@ export async function createShipment(data: CreateShipmentRequest): Promise<Shipm
   }
 
   const response = await apiCall<Shipment>('/shipments/v1', 'POST', formData);
+  return response.data!;
+}
+
+export async function getTrips(): Promise<Trip[]> {
+  const response = await apiCall<Trip[]>('/trips/v1', 'GET');
+  return response.data!;
+}
+
+export async function createTrip(data: CreateTripRequest): Promise<CreateTripResponse> {
+  const response = await apiCall<CreateTripResponse>('/trips/v1', 'POST', data);
   return response.data!;
 }
