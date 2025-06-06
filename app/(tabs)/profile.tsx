@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ImageBackground, TouchableOpacity, Image, Platform, Alert } from 'react-native';
+import { View, StyleSheet, ImageBackground, TouchableOpacity, Image, Platform, Alert, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Text from '@/components/Text';
@@ -7,7 +7,7 @@ import Colors from '@/constants/Colors';
 import Mail from '@/assets/svgs/Mail';
 import Phone from '@/assets/svgs/Phone';
 import LoadingSpinner from '@/components/LoadingSpinner';
-import { getProfile } from '@/utils/api';
+import { getProfile, logout } from '@/utils/api';
 
 interface ProfileData {
   id: string;
@@ -51,6 +51,33 @@ export default function ProfileScreen() {
       });
     }
   };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      // Disable back button
+      BackHandler.addEventListener('hardwareBackPress', () => true);
+      // Replace the entire navigation stack with login
+      router.replace({
+        pathname: '/(auth)/login',
+        params: { preventBack: 'true' }
+      });
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to logout. Please try again.');
+    }
+  };
+
+  // Add effect to handle back button
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (router.canGoBack()) {
+        router.back();
+      }
+      return true;
+    });
+
+    return () => backHandler.remove();
+  }, []);
 
   if (loading || !profileData) {
     return (
@@ -127,6 +154,14 @@ export default function ProfileScreen() {
             {/* Illustration */}
             <Image source={currentRoleData.illustration} style={styles.roleIllustration} resizeMode="contain" />
           </View>
+
+          {/* Logout Button */}
+          <TouchableOpacity 
+            style={styles.logoutButton} 
+            onPress={handleLogout}
+          >
+            <Text style={styles.logoutButtonText} color="error">Logout</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
@@ -258,5 +293,17 @@ const styles = StyleSheet.create({
   roleIllustration: {
     width: 120,
     height: 120,
+  },
+  logoutButton: {
+    marginTop: 24,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: Colors.error,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  logoutButtonText: {
+    fontSize: 16,
+    fontFamily: 'OpenSans_600SemiBold',
   },
 });

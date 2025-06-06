@@ -10,8 +10,9 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
   Alert,
+  BackHandler,
 } from 'react-native';
-import { Link, useRouter } from 'expo-router';
+import { Link, useRouter, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { EyeOff } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -32,10 +33,22 @@ export default function LoginScreen() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const passwordInputRef = useRef<TextInput | null>(null);
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const preventBack = params.preventBack === 'true';
 
   useEffect(() => {
     checkAuthStatus();
   }, []);
+
+  useEffect(() => {
+    if (preventBack) {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        return true; // Prevent going back
+      });
+
+      return () => backHandler.remove();
+    }
+  }, [preventBack]);
 
   const checkAuthStatus = async () => {
     try {
