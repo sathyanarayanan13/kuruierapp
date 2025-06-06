@@ -298,7 +298,7 @@ export default function PackageDetailsTab() {
 
                         <View style={styles.packageInfo}>
                           <Image
-                            source={{ uri: item.packageImageUrl }}
+                            source={{ uri: `http://194.164.150.61:3000${item.packageImageUrl}` }}
                             style={styles.packageImage}
                           />
                           <View>
