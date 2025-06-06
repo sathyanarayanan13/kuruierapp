@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { useFonts } from '@/hooks/useFonts';
 import SplashScreen from '@/components/SplashScreen';
+import { UserProvider } from '@/utils/UserContext';
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -16,7 +17,7 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <UserProvider>
       {showSplash ? (
         <SplashScreen onAnimationComplete={() => setShowSplash(false)} />
       ) : (
@@ -27,6 +28,6 @@ export default function RootLayout() {
           <StatusBar style="light" />
         </>
       )}
-    </>
+    </UserProvider>
   );
 }

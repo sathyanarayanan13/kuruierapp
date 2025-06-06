@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, StyleSheet, ImageBackground, TouchableOpacity, Image, Platform, Alert, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -7,7 +7,8 @@ import Colors from '@/constants/Colors';
 import Mail from '@/assets/svgs/Mail';
 import Phone from '@/assets/svgs/Phone';
 import LoadingSpinner from '@/components/LoadingSpinner';
-import { getProfile, logout } from '@/utils/api';
+import { getProfile, logout, updateProfile } from '@/utils/api';
+import { useUserRole } from '@/utils/UserContext';
 
 interface ProfileData {
   id: string;
@@ -21,12 +22,14 @@ export default function ProfileScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
+  const { setUserRole } = useUserRole();
 
   const fetchProfile = async () => {
     try {
       setLoading(true);
       const data = await getProfile();
       setProfileData(data);
+      setUserRole(data.currentRole);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to fetch profile data');
     } finally {
@@ -36,7 +39,7 @@ export default function ProfileScreen() {
 
   // Use useFocusEffect to refresh data when screen comes into focus
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       fetchProfile();
     }, [])
   );

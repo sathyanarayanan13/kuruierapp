@@ -39,10 +39,10 @@ const CustomTabBar: React.FC<CustomTabBarProps> = ({
   // Tab config
   const tabConfig = [
     showOwnerTabs
-      ? { key: 'Owners', label: 'Owners', icon: TabIcons.Owners, route: 'owners' }
+      ? { key: 'Owners', label: 'Couriers', icon: TabIcons.Owners, route: 'owners' }
       : { key: 'Travelers', label: 'Travellers', icon: TabIcons.Travelers, route: 'travelers-list' },
     showOwnerTabs
-      ? { key: 'Shipments', label: 'Shipments', icon: TabIcons.Shipments, route: 'shipments' }
+      ? { key: 'Shipments', label: 'Travel\'s', icon: TabIcons.Shipments, route: 'shipments' }
       : { key: 'Packages', label: 'Packages', icon: TabIcons.Packages, route: 'package-details' },
     { key: 'Chats', label: 'Chats', icon: TabIcons.Chats, route: 'chat' },
     { key: 'Profile', label: 'Profile', icon: TabIcons.Profile, route: 'profile' },

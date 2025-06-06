@@ -20,6 +20,7 @@ import FilterIcon from '@/assets/svgs/FilterIcon';
 import FlightIcon from '@/assets/svgs/FlightIcon';
 import MessageIcon from '@/assets/svgs/MessageIcon';
 import SendIcon from '@/assets/svgs/SendIcon';
+import React from 'react';
 
 const airports = ['New York Airport', 'London Heathrow', 'Dubai International'];
 const radiusOptions = ['5 km', '10 km', '15 km', '20 km'];
