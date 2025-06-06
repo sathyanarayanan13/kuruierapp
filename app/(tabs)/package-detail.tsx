@@ -8,9 +8,11 @@ import {
   Platform,
   Image,
   Dimensions,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
-import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
 import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
 import Dropdown from '@/components/Dropdown';
@@ -25,6 +27,7 @@ import FlightRight from '@/assets/svgs/FlightRight';
 import AddIcon from '@/assets/svgs/AddIcon';
 import People from '@/assets/svgs/People';
 import TravelerSelectIcon from '@/assets/svgs/TravelerSelectIcon';
+import { getShipments } from '@/utils/api';
 
 const airports = ['New York Airport', 'London Heathrow', 'Dubai International'];
 const radiusOptions = ['5 km', '10 km', '15 km', '20 km'];
@@ -58,6 +61,27 @@ interface HistoryItem {
     weight: string;
     image: string;
   };
+}
+
+interface Shipment {
+  id: string;
+  userId: string;
+  packageType: string;
+  estimatedDeliveryDate: string;
+  weightGrams: number;
+  destinationCountry: string;
+  packageImageUrl: string;
+  status: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED';
+  lat_coordinates: string;
+  long_coordinates: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ShipmentResponse {
+  success: boolean;
+  message: string;
+  data: Shipment[];
 }
 
 const travelers: Traveler[] = [
@@ -94,6 +118,36 @@ const travelers: Traveler[] = [
 
 export default function PackageDetailsTab() {
   const router = useRouter();
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchShipments = async () => {
+    try {
+      setLoading(true);
+      const data = await getShipments();
+      setShipments(data);
+      setError(null);
+    } catch (err) {
+      setError('Failed to fetch shipments');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Refresh on focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchShipments();
+    }, [])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchShipments();
+    setRefreshing(false);
+  }, []);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -107,61 +161,52 @@ export default function PackageDetailsTab() {
     router.push('/chat');
   };
 
-  const historyItems: HistoryItem[] = [
-    {
-      id: '1',
-      date: '23/03/2025',
-      status: 'upcoming',
-      route: {
-        from: 'New York',
-        to: 'London',
-      },
-      package: {
-        name: 'Mobile Phone',
-        weight: '<2kg',
-        image:
-          'https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg',
-      },
-    }
-  ];
-
-  const getStatusColor = (status: HistoryItem['status']) => {
+  const getStatusColor = (status: Shipment['status']) => {
     switch (status) {
-      case 'upcoming':
+      case 'PENDING':
         return Colors.primary;
-      case 'ongoing':
+      case 'IN_TRANSIT':
         return Colors.warning;
-      case 'completed':
+      case 'DELIVERED':
         return Colors.success;
       default:
         return Colors.primary;
     }
   };
 
-  const getStatusBgColor = (status: HistoryItem['status']) => {
+  const getStatusBgColor = (status: Shipment['status']) => {
     switch (status) {
-      case 'upcoming':
+      case 'PENDING':
         return '#F1F4FF';
-      case 'ongoing':
+      case 'IN_TRANSIT':
         return '#FFF6ED';
-      case 'completed':
+      case 'DELIVERED':
         return '#DDFFF3';
       default:
         return Colors.primary;
     }
   };
 
-  const getStatusText = (status: HistoryItem['status']) => {
+  const getStatusText = (status: Shipment['status']) => {
     switch (status) {
-      case 'upcoming':
+      case 'PENDING':
         return 'Yet to start';
-      case 'ongoing':
+      case 'IN_TRANSIT':
         return 'Travelling';
-      case 'completed':
+      case 'DELIVERED':
         return 'Completed';
       default:
         return status;
     }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
   };
 
   return (
@@ -189,72 +234,96 @@ export default function PackageDetailsTab() {
           </ImageBackground>
         </View>
 
-        <ScrollView style={styles.content}>
-          <View style={styles.historyContainer}>
-            {['UPCOMING', 'ONGOING', 'COMPLETED'].map((section) => {
-              const items = historyItems.filter(
-                (item) => item.status === section.toLowerCase()
-              );
+        <ScrollView 
+          style={styles.content}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
+        >
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+            </View>
+          ) : error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : shipments.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No packages available</Text>
+            </View>
+          ) : (
+            <View style={styles.historyContainer}>
+              {['PENDING', 'IN_TRANSIT', 'DELIVERED'].map((section) => {
+                const items = shipments.filter(
+                  (item) => item.status === section
+                );
 
-              if (items.length === 0) return null;
+                if (items.length === 0) return null;
 
-              return (
-                <View key={section} style={styles.historySection}>
-                  {items.map((item) => (
-                    <View key={item.id} style={styles.historyCard}>
-                      <View style={styles.historyHeader}>
-                        <View style={styles.dateContainer}>
-                          <DatePicker width={20} height={20} stroke="#75758E" />
-                          <Text style={styles.date}>{item.date}</Text>
+                return (
+                  <View key={section} style={styles.historySection}>
+                    {items.map((item) => (
+                      <View key={item.id} style={styles.historyCard}>
+                        <View style={styles.historyHeader}>
+                          <View style={styles.dateContainer}>
+                            <DatePicker width={20} height={20} stroke="#75758E" />
+                            <Text style={styles.date}>{formatDate(item.estimatedDeliveryDate)}</Text>
+                          </View>
+                          <Text
+                            style={[
+                              styles.status,
+                              {
+                                color: getStatusColor(item.status),
+                                backgroundColor: getStatusBgColor(item.status),
+                              },
+                            ]}
+                          >
+                            {getStatusText(item.status)}
+                          </Text>
                         </View>
-                        <Text
-                          style={[
-                            styles.status,
-                            {
-                              color: getStatusColor(item.status),
-                              backgroundColor: getStatusBgColor(item.status),
-                            },
-                          ]}
+
+                        <View style={styles.routeContainer}>
+                          <Text style={styles.city}>Current Location</Text>
+                          <View style={styles.dashedLine} />
+                          <FlightRight stroke="#55559D" width={25} height={25} />
+                          <View style={styles.dashedLine} />
+                          <Text style={styles.city}>{item.destinationCountry}</Text>
+                        </View>
+
+                        <View style={styles.packageInfo}>
+                          <Image
+                            source={{ uri: item.packageImageUrl }}
+                            style={styles.packageImage}
+                          />
+                          <View>
+                            <Text style={styles.packageName} semiBold>
+                              {item.packageType}
+                            </Text>
+                            <Text style={styles.packageWeight}>
+                              Weight : {item.weightGrams}g
+                            </Text>
+                          </View>
+                        </View>
+
+                        <TouchableOpacity
+                          style={styles.actionButton}
                         >
-                          {getStatusText(item.status)}
-                        </Text>
+                          <TravelerSelectIcon width={20} height={20} />
+                          <Text style={styles.buttonText}>Select Traveler</Text>
+                        </TouchableOpacity>
                       </View>
-
-                      <View style={styles.routeContainer}>
-                        <Text style={styles.city}>{item.route.from}</Text>
-                        <View style={styles.dashedLine} />
-                        <FlightRight stroke="#55559D" width={25} height={25} />
-                        <View style={styles.dashedLine} />
-                        <Text style={styles.city}>{item.route.to}</Text>
-                      </View>
-
-                      <View style={styles.packageInfo}>
-                        <Image
-                          source={{ uri: item.package.image }}
-                          style={styles.packageImage}
-                        />
-                        <View>
-                          <Text style={styles.packageName} semiBold>
-                            {item.package.name}
-                          </Text>
-                          <Text style={styles.packageWeight}>
-                            Weight : {item.package.weight}
-                          </Text>
-                        </View>
-                      </View>
-
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                      >
-                        <TravelerSelectIcon width={20} height={20} />
-                        <Text style={styles.buttonText}>Select Traveler</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-              );
-            })}
-          </View>
+                    ))}
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -417,5 +486,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.mainTheme,
     fontFamily: 'OpenSans_500Medium',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    color: Colors.error,
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  emptyText: {
+    color: Colors.primary,
+    fontSize: 16,
+    textAlign: 'center',
   },
 });

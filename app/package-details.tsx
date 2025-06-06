@@ -6,6 +6,7 @@ import {
   ScrollView,
   ImageBackground,
   Image,
+  Alert,
 } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
@@ -17,9 +18,12 @@ import Colors from '@/constants/Colors';
 import Dropdown from '@/components/Dropdown';
 import FileDownload from '@/assets/svgs/FileDownload';
 import DatePicker from '@/assets/svgs/DatePicker';
+import { useLocation } from '@/hooks/useLocation';
+import { useImagePicker } from '@/hooks/useImagePicker';
+import { createShipment } from '@/utils/api';
 
-const packageTypes = ['Documents', 'Snacks', 'Clothes'];
-const weights = ['0.5 kg', '1 kg', '1.5 kg', '2.5 kg'];
+const packageTypes = ['DOCUMENTS', 'SNACKS', 'CLOTHES', 'ELECTRONICS', 'OTHER'];
+const weights = ['0.5', '1', '1.5', '2.5'];
 const countries = ['UAE', 'USA', 'UK', 'India', 'Singapore'];
 
 export default function PackageDetailsScreen() {
@@ -28,37 +32,18 @@ export default function PackageDetailsScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [weight, setWeight] = useState('');
   const [country, setCountry] = useState('');
-  const [image, setImage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
+
+  // Use custom hooks
+  const { latitude, longitude, errorMsg: locationError } = useLocation();
+  const { image, error: imageError, pickImage, takePhoto } = useImagePicker();
 
   const handleBack = () => {
     if (router.canGoBack()) {
       router.back();
     } else {
       router.replace('/');
-    }
-  };
-
-  const pickImage = async (useCamera: boolean) => {
-    const options: ImagePicker.ImagePickerOptions = {
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    };
-
-    let result: any;
-    if (useCamera) {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (permission.granted) {
-        result = await ImagePicker.launchCameraAsync(options);
-      }
-    } else {
-      result = await ImagePicker.launchImageLibraryAsync(options);
-    }
-
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
     }
   };
 
@@ -69,9 +54,58 @@ export default function PackageDetailsScreen() {
     }
   };
 
-  const handleNext = () => {
-    // Navigate to travelers list
-    router.push('/travelers-list');
+  const validateForm = () => {
+    if (!packageType) {
+      Alert.alert('Error', 'Please select package type');
+      return false;
+    }
+    if (!weight) {
+      Alert.alert('Error', 'Please select weight');
+      return false;
+    }
+    if (!country) {
+      Alert.alert('Error', 'Please select destination country');
+      return false;
+    }
+    if (!image) {
+      Alert.alert('Error', 'Please upload package image');
+      return false;
+    }
+    if (locationError) {
+      Alert.alert('Error', 'Location permission is required');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
+
+    try {
+      setIsSubmitting(true);
+      
+      const shipmentData = {
+        packageType: packageType as 'DOCUMENTS' | 'SNACKS' | 'CLOTHES' | 'ELECTRONICS' | 'OTHER',
+        estimatedDeliveryDate: deliveryDate.toISOString().split('T')[0],
+        weightGrams: parseFloat(weight) * 1000, // Convert kg to grams
+        destinationCountry: country,
+        lat_coordinates: latitude,
+        long_coordinates: longitude,
+        packageImage: image,
+      };
+
+      await createShipment(shipmentData);
+      
+      // Navigate back and trigger refresh
+      router.push({
+        pathname: '/(tabs)/package-detail',
+        params: { refresh: Date.now() } // Add a timestamp to force refresh
+      });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to create shipment. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -120,36 +154,36 @@ export default function PackageDetailsScreen() {
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>
-              Estimated Delivery Date <Text style={styles.required}>*</Text>
+                Estimated Delivery Date <Text style={styles.required}>*</Text>
               </Text>
               <TouchableOpacity
-              style={styles.dateInput}
-              onPress={() => setShowDatePicker(true)}
+                style={styles.dateInput}
+                onPress={() => setShowDatePicker(true)}
               >
-              <Text style={styles.dateText}>
-                {deliveryDate.toLocaleDateString()}
-              </Text>
-              <DatePicker
-                width={15}
-                height={15}
-                color="#5059A5"
-                style={{ marginLeft: 20 }}
-              />
+                <Text style={styles.dateText}>
+                  {deliveryDate.toLocaleDateString()}
+                </Text>
+                <DatePicker
+                  width={15}
+                  height={15}
+                  color="#5059A5"
+                  style={{ marginLeft: 20 }}
+                />
               </TouchableOpacity>
               {showDatePicker && (
-              <DateTimePicker
-                value={deliveryDate}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={handleDateChange}
-                minimumDate={new Date()}
-              />
+                <DateTimePicker
+                  value={deliveryDate}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={handleDateChange}
+                  minimumDate={new Date()}
+                />
               )}
             </View>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>
-                Shipment Weight <Text style={styles.required}>*</Text>
+                Shipment Weight (kg) <Text style={styles.required}>*</Text>
               </Text>
               <Dropdown
                 value={weight}
@@ -172,7 +206,7 @@ export default function PackageDetailsScreen() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Upload Package Image</Text>
+              <Text style={styles.label}>Upload Package Image <Text style={styles.required}>*</Text></Text>
               <View style={styles.imageUpload}>
                 {image ? (
                   <View style={styles.previewContainer}>
@@ -180,7 +214,7 @@ export default function PackageDetailsScreen() {
                     <Text style={styles.uploadText}>Image selected</Text>
                   </View>
                 ) : (
-                  <TouchableOpacity onPress={() => pickImage(false)}>
+                  <TouchableOpacity onPress={() => pickImage()}>
                     <View style={styles.uploadPlaceholder}>
                       <FileDownload
                         width={15}
@@ -188,33 +222,20 @@ export default function PackageDetailsScreen() {
                         color="#5059A5"
                         style={styles.fileDownload}
                       />
-                      {/* <Text style={styles.uploadText}>Upload package image</Text> */}
                     </View>
                   </TouchableOpacity>
                 )}
-                {/* <View style={styles.imageActions}>
-                  <TouchableOpacity
-                    style={styles.imageButton}
-                    onPress={() => pickImage(false)}
-                  >
-                    <ImageIcon size={20} color={Colors.mainTheme} />
-                    <Text style={styles.imageButtonText}>Gallery</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.imageButton}
-                    onPress={() => pickImage(true)}
-                  >
-                    <Camera size={20} color={Colors.mainTheme} />
-                    <Text style={styles.imageButtonText}>Camera</Text>
-                  </TouchableOpacity>
-                </View> */}
               </View>
             </View>
           </View>
 
-          <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+          <TouchableOpacity 
+            style={[styles.nextButton, isSubmitting && styles.disabledButton]} 
+            onPress={handleSubmit}
+            disabled={isSubmitting}
+          >
             <Text style={styles.nextButtonText} color="secondary" semiBold>
-              Next
+              {isSubmitting ? 'Creating...' : 'Create Package'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -398,6 +419,9 @@ const styles = StyleSheet.create({
   },
   nextButtonText: {
     fontSize: 16,
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
 });
 

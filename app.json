@@ -10,7 +10,13 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sathya131626.kuruier"
+      "bundleIdentifier": "com.sathya131626.kuruier",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "We need your location to track package delivery locations",
+        "NSLocationAlwaysUsageDescription": "We need your location to track package delivery locations",
+        "NSPhotoLibraryUsageDescription": "We need access to your photo library to upload package images",
+        "NSCameraUsageDescription": "We need access to your camera to take package images"
+      }
     },
     "web": {
       "bundler": "metro",
@@ -45,7 +51,14 @@
     "android": {
       "package": "com.sathya131626.kuruier",
       "version": "1.0.3",
-      "versionCode": 3
+      "versionCode": 3,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     }
   }
 }

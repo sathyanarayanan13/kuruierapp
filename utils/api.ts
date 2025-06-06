@@ -3,12 +3,10 @@ import { Platform } from 'react-native';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-// Token storage keys
 const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
 const USER_DATA_KEY = 'user_data';
 
-// API response types
 interface ApiResponse<T> {
   success: boolean;
   message: string;
@@ -31,7 +29,6 @@ interface AuthResponse {
   refreshToken: string;
 }
 
-// Profile types
 interface Profile {
   id: string;
   username: string;
@@ -40,7 +37,31 @@ interface Profile {
   currentRole: 'SHIPMENT_OWNER' | 'TRAVELLER';
 }
 
-// API call function
+interface Shipment {
+  id: string;
+  userId: string;
+  packageType: string;
+  estimatedDeliveryDate: string;
+  weightGrams: number;
+  destinationCountry: string;
+  packageImageUrl: string;
+  status: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED';
+  lat_coordinates: string;
+  long_coordinates: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CreateShipmentRequest {
+  packageType: 'DOCUMENTS' | 'SNACKS' | 'CLOTHES' | 'ELECTRONICS' | 'OTHER';
+  estimatedDeliveryDate: string;
+  weightGrams: number;
+  destinationCountry: string;
+  lat_coordinates: string;
+  long_coordinates: string;
+  packageImage: any; 
+}
+
 async function apiCall<T>(
   endpoint: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
@@ -48,9 +69,11 @@ async function apiCall<T>(
 ): Promise<ApiResponse<T>> {
   try {
     const accessToken = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
+    const headers: Record<string, string> = {};
+
+    if (!(body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
 
     if (accessToken) {
       headers['Authorization'] = `Bearer ${accessToken}`;
@@ -59,19 +82,17 @@ async function apiCall<T>(
     const response = await fetch(`${API_URL}${endpoint}`, {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      // If token is expired, try to refresh it
       if (response.status === 401 && accessToken) {
         const refreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
         if (refreshToken) {
           const refreshResponse = await refreshAccessToken(refreshToken);
           if (refreshResponse.success) {
-            // Retry the original request with new token
             return apiCall(endpoint, method, body);
           }
         }
@@ -86,9 +107,8 @@ async function apiCall<T>(
   }
 }
 
-// Authentication functions
 export async function login(mobileNumber: string, password: string): Promise<AuthResponse> {
-  const response = await apiCall<AuthResponse>('/v1/auth/login', 'POST', {
+  const response = await apiCall<AuthResponse>('/users/v1/auth/login', 'POST', {
     mobileNumber,
     password,
   });
@@ -108,7 +128,7 @@ export async function signup(
   mobileNumber: string,
   password: string
 ): Promise<{ userId: string }> {
-  const response = await apiCall<{ userId: string }>('/v1/auth/signup', 'POST', {
+  const response = await apiCall<{ userId: string }>('/users/v1/auth/signup', 'POST', {
     username,
     email,
     mobileNumber,
@@ -119,7 +139,7 @@ export async function signup(
 }
 
 export async function verifyOtp(userId: string, otp: string): Promise<AuthResponse> {
-  const response = await apiCall<AuthResponse>('/v1/auth/verify-otp', 'POST', {
+  const response = await apiCall<AuthResponse>('/users/v1/auth/verify-otp', 'POST', {
     userId,
     otp,
   });
@@ -134,12 +154,12 @@ export async function verifyOtp(userId: string, otp: string): Promise<AuthRespon
 }
 
 export async function resendOtp(userId: string): Promise<void> {
-  await apiCall('/v1/auth/resend-otp', 'POST', { userId });
+  await apiCall('/users/v1/auth/resend-otp', 'POST', { userId });
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<ApiResponse<{ accessToken: string; refreshToken: string }>> {
   const response = await apiCall<{ accessToken: string; refreshToken: string }>(
-    '/v1/auth/refresh-token',
+    '/users/v1/auth/refresh-token',
     'POST',
     { refreshToken }
   );
@@ -166,9 +186,8 @@ export async function isAuthenticated(): Promise<boolean> {
   return !!accessToken;
 }
 
-// Profile API functions
 export async function getProfile(): Promise<Profile> {
-  const response = await apiCall<Profile>('/v1/profile', 'GET');
+  const response = await apiCall<Profile>('/users/v1/profile', 'GET');
   return response.data!;
 }
 
@@ -178,10 +197,37 @@ export async function updateProfile(
   mobileNumber: string,
   currentRole: 'SHIPMENT_OWNER' | 'TRAVELLER'
 ): Promise<void> {
-  await apiCall('/v1/profile', 'PUT', {
+  await apiCall('/users/v1/profile', 'PUT', {
     username,
     email,
     mobileNumber,
     currentRole,
   });
-} 
+}
+
+export async function getShipments(): Promise<Shipment[]> {
+  const response = await apiCall<Shipment[]>('/shipments/v1', 'GET');
+  return response.data!;
+}
+
+export async function createShipment(data: CreateShipmentRequest): Promise<Shipment> {
+  const formData = new FormData();
+  
+  formData.append('packageType', data.packageType);
+  formData.append('estimatedDeliveryDate', data.estimatedDeliveryDate);
+  formData.append('weightGrams', data.weightGrams.toString());
+  formData.append('destinationCountry', data.destinationCountry);
+  formData.append('lat_coordinates', data.lat_coordinates);
+  formData.append('long_coordinates', data.long_coordinates);
+  
+  if (data.packageImage) {
+    formData.append('packageImage', {
+      uri: data.packageImage.uri,
+      type: 'image/jpeg',
+      name: 'image.jpg'
+    } as any);
+  }
+
+  const response = await apiCall<Shipment>('/shipments/v1', 'POST', formData);
+  return response.data!;
+}
