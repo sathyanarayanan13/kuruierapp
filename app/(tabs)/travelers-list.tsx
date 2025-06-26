@@ -8,8 +8,9 @@ import {
   Platform,
   Image,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
@@ -21,6 +22,9 @@ import FlightIcon from '@/assets/svgs/FlightIcon';
 import MessageIcon from '@/assets/svgs/MessageIcon';
 import SendIcon from '@/assets/svgs/SendIcon';
 import React from 'react';
+import { getTrips } from '@/utils/api';
+import { formatDate, formatTime } from '@/utils/dateUtils';
+import type { Trip } from '@/utils/api';
 
 const airports = ['New York Airport', 'London Heathrow', 'Dubai International'];
 const radiusOptions = ['5 km', '10 km', '15 km', '20 km'];
@@ -51,58 +55,32 @@ const getResponsiveSpacing = (baseSize:any) => {
   return Math.round(baseSize * clampedScale);
 };
 
-interface Traveler {
-  id: string;
-  name: string;
-  avatar: string;
-  status: 'accepting' | 'maybe';
-  fromDate: string;
-  fromTime: string;
-  fromLocation: string;
-  fromAirport: string;
-  toDate: string;
-  toTime: string;
-  toLocation: string;
-  toAirport: string;
-}
-
-const travelers: Traveler[] = [
-  {
-    id: '1',
-    name: 'Traveller 1',
-    avatar: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg',
-    status: 'accepting',
-    fromDate: '11/03/2025',
-    fromTime: '11:30 AM',
-    fromLocation: 'New York Del',
-    fromAirport: 'New York Airport US',
-    toDate: '12/03/2025',
-    toTime: '02:45 PM',
-    toLocation: 'London',
-    toAirport: 'New York Airport US',
-  },
-  {
-    id: '2',
-    name: 'Traveller 2',
-    avatar:
-      'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg',
-    status: 'maybe',
-    fromDate: '11/03/2025',
-    fromTime: '11:30 AM',
-    fromLocation: 'New York Del',
-    fromAirport: 'New York Airport US',
-    toDate: '12/03/2025',
-    toTime: '02:45 PM',
-    toLocation: 'London',
-    toAirport: 'New York Airport US',
-  },
-];
-
 export default function TravelersListScreen() {
   const [showFilter, setShowFilter] = useState(false);
   const [selectedAirport, setSelectedAirport] = useState('');
   const [selectedRadius, setSelectedRadius] = useState('');
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    fetchTrips();
+  }, []);
+
+  const fetchTrips = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getTrips();
+      setTrips(data);
+    } catch (err) {
+      setError('Failed to fetch travelers list');
+      console.error('Error fetching trips:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -120,8 +98,8 @@ export default function TravelersListScreen() {
     router.push('/chat');
   };
 
-  const renderTravelerCard = (traveler: Traveler) => (
-    <View key={traveler.id} style={styles.card}>
+  const renderTravelerCard = (trip: Trip) => (
+    <View key={trip.id} style={styles.card}>
       <ImageBackground
         source={require('@/assets/images/formListBg.png')}
         style={styles.cardBackground}
@@ -131,32 +109,35 @@ export default function TravelersListScreen() {
         <View style={styles.cardContent}>
           <View style={styles.cardHeader}>
             <View style={styles.travelerInfo}>
-              <Image source={{ uri: traveler.avatar }} style={styles.avatar} />
+              <Image 
+                source={{ uri: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg' }} 
+                style={styles.avatar} 
+              />
               <Text style={styles.travelerName} semiBold>
-                {traveler.name}
+                {trip.pnrNumber}
               </Text>
             </View>
             <View
               style={[
                 styles.statusBadge,
-                traveler.status === 'accepting'
+                trip.status === 'ACCEPTING'
                   ? styles.statusAccepting
                   : styles.statusMaybe,
               ]}
             >
               <Text
                 style={styles.statusText}
-                color={traveler.status === 'accepting' ? '#13996B' : '#F1467B'}
+                color={trip.status === 'ACCEPTING' ? '#13996B' : '#F1467B'}
               >
-                {traveler.status === 'accepting' ? 'Accepting' : 'May be later'}
+                {trip.status === 'ACCEPTING' ? 'Accepting' : 'May be later'}
               </Text>
             </View>
           </View>
 
           <View style={styles.tripInfo}>
             <View style={styles.dateTimeColumn}>
-              <Text style={styles.date}>{traveler.fromDate}</Text>
-              <Text style={styles.time}>{traveler.fromTime}</Text>
+              <Text style={styles.date}>{formatDate(trip.departureDate)}</Text>
+              <Text style={styles.time}>{formatTime(trip.departureDate)}</Text>
             </View>
             <View style={styles.locationColumn}>
               <FlightIcon
@@ -166,9 +147,9 @@ export default function TravelersListScreen() {
               />
               <View>
                 <Text style={styles.location} semiBold>
-                  {traveler.fromLocation}
+                  {trip.fromCountry}
                 </Text>
-                <Text style={styles.airport}>{traveler.fromAirport}</Text>
+                <Text style={styles.airport}>{trip.flightInfo}</Text>
               </View>
             </View>
 
@@ -185,8 +166,8 @@ export default function TravelersListScreen() {
 
           <View style={styles.tripInfo}>
             <View style={styles.dateTimeColumn}>
-              <Text style={styles.date}>{traveler.toDate}</Text>
-              <Text style={styles.time}>{traveler.toTime}</Text>
+              <Text style={styles.date}>{formatDate(trip.departureDate)}</Text>
+              <Text style={styles.time}>{formatTime(trip.departureDate)}</Text>
             </View>
             <View style={styles.locationColumn}>
               <FlightIcon
@@ -196,18 +177,18 @@ export default function TravelersListScreen() {
               />
               <View>
                 <Text style={styles.location} semiBold>
-                  {traveler.toLocation}
+                  {trip.toCountry}
                 </Text>
-                <Text style={styles.airport}>{traveler.toAirport}</Text>
+                <Text style={styles.airport}>{trip.flightInfo}</Text>
               </View>
             </View>
           </View>
 
           <TouchableOpacity
-            style={[styles.actionButton, traveler.status !== 'accepting' && { borderColor: '#009C66' }]}
-            onPress={traveler.status === 'accepting' ? handleChat : undefined}
+            style={[styles.actionButton, trip.status !== 'ACCEPTING' && { borderColor: '#009C66' }]}
+            onPress={trip.status === 'ACCEPTING' ? handleChat : undefined}
           >
-            {traveler.status === 'accepting' ? (
+            {trip.status === 'ACCEPTING' ? (
               <>
                 <MessageIcon width={20} height={20} style={{ marginTop: 6 }}/>
                 <Text style={styles.buttonText}>Chat With the Traveler</Text>
@@ -224,6 +205,42 @@ export default function TravelersListScreen() {
       </ImageBackground>
     </View>
   );
+
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      );
+    }
+
+    if (error) {
+      return (
+        <View style={styles.centerContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      );
+    }
+
+    if (trips.length === 0) {
+      return (
+        <View style={styles.centerContainer}>
+          <Text style={styles.noDataText}>No travelers list found</Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {trips.map(renderTravelerCard)}
+      </ScrollView>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -252,13 +269,7 @@ export default function TravelersListScreen() {
             </View>
           </ImageBackground>
         </View>
-        <ScrollView
-          style={styles.content}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {travelers.map(renderTravelerCard)}
-        </ScrollView>
+        {renderContent()}
 
         <Modal
           visible={showFilter}
@@ -571,5 +582,21 @@ const styles = StyleSheet.create({
   },
   applyButtonText: {
     fontSize: 16,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: -120,
+  },
+  errorText: {
+    color: Colors.error,
+    fontSize: 16,
+    fontFamily: 'OpenSans_500Medium',
+  },
+  noDataText: {
+    color: Colors.primary,
+    fontSize: 16,
+    fontFamily: 'OpenSans_500Medium',
   },
 });

@@ -7,6 +7,7 @@ import {
   Platform,
   SafeAreaView,
   ImageBackground,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -25,50 +26,34 @@ import WeightIcon from '@/assets/svgs/WeightIcon';
 import DatePicker from '@/assets/svgs/DatePicker';
 import MessageIcon from '@/assets/svgs/MessageIcon';
 import SendIcon from '@/assets/svgs/SendIcon';
-
-interface Shipment {
-  id: string;
-  title: string;
-  image: string;
-  weight: string;
-  expectedDate: string;
-  status?: 'pending' | 'sent';
-}
-
-const shipments: Shipment[] = [
-  {
-    id: '1',
-    title: 'Mobile Phone',
-    image: 'https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg',
-    weight: '<2kg',
-    expectedDate: '01/04/2025',
-  },
-  {
-    id: '2',
-    title: 'Packed Dresses',
-    image: 'https://images.pexels.com/photos/996329/pexels-photo-996329.jpeg',
-    weight: '<2kg',
-    expectedDate: '01/04/2025',
-    status: 'sent',
-  },
-  {
-    id: '3',
-    title: 'Smart Watch',
-    image: 'https://images.pexels.com/photos/437037/pexels-photo-437037.jpeg',
-    weight: '<200g',
-    expectedDate: '01/04/2025',
-  },
-  {
-    id: '4',
-    title: 'Mobile Phone',
-    image: 'https://images.pexels.com/photos/47261/pexels-photo-47261.jpeg',
-    weight: '<2kg',
-    expectedDate: '01/04/2025',
-  },
-];
+import { useState, useEffect } from 'react';
+import { getShipments } from '@/utils/api';
+import type { Shipment } from '@/utils/api';
+import { formatDate } from '@/utils/dateUtils';
 
 export default function CourierListScreen() {
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    fetchShipments();
+  }, []);
+
+  const fetchShipments = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getShipments();
+      setShipments(data);
+    } catch (err) {
+      setError('Failed to fetch courier list');
+      console.error('Error fetching shipments:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -80,6 +65,94 @@ export default function CourierListScreen() {
 
   const handleChat = () => {
     router.push('/traveler-chat');
+  };
+
+  const formatWeight = (weightGrams: number) => {
+    if (weightGrams < 1000) {
+      return `<${weightGrams}g`;
+    }
+    return `<${Math.round(weightGrams / 1000)}kg`;
+  };
+
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      );
+    }
+
+    if (error) {
+      return (
+        <View style={styles.centerContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      );
+    }
+
+    if (shipments.length === 0) {
+      return (
+        <View style={styles.centerContainer}>
+          <Text style={styles.noDataText}>No courier's list found</Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {shipments.map((shipment) => (
+          <View key={shipment.id} style={styles.card}>
+            <View style={styles.cardContent}>
+              <View style={styles.shipmentInfo}>
+                <Image
+                  source={{ uri: `http://194.164.150.61:3000${shipment.packageImageUrl}` }}
+                  style={styles.shipmentImage}
+                />
+                <View style={styles.shipmentDetails}>
+                  <Text style={styles.shipmentTitle} semiBold>
+                    {shipment.packageType}
+                  </Text>
+                  <View style={styles.infoRow}>
+                    <WeightIcon width={20} height={20} />
+                    <Text style={styles.infoText}>
+                      Weight : {formatWeight(shipment.weightGrams)}
+                    </Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <DatePicker width={20} height={20} pathFill='#FFFCDD' />
+                    <Text style={styles.infoText}>
+                      Expected date : {formatDate(shipment.estimatedDeliveryDate)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {shipment.status === 'IN_TRANSIT' ? (
+                <View style={styles.sentStatus}>
+                  <SendIcon width={22} height={22}/>
+                  <Text style={styles.sentStatusText}>Request Sent</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.chatButton}
+                  onPress={handleChat}
+                >
+                  <MessageIcon  />
+                  <Text style={styles.chatButtonText}>
+                    Chat with the Shipment Owner
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    );
   };
 
   return (
@@ -106,58 +179,7 @@ export default function CourierListScreen() {
             </View>
           </ImageBackground>
         </View>
-        <ScrollView
-          style={styles.content}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {shipments.map((shipment) => (
-            <View key={shipment.id} style={styles.card}>
-              <View style={styles.cardContent}>
-                <View style={styles.shipmentInfo}>
-                  <Image
-                    source={{ uri: shipment.image }}
-                    style={styles.shipmentImage}
-                  />
-                  <View style={styles.shipmentDetails}>
-                    <Text style={styles.shipmentTitle} semiBold>
-                      {shipment.title}
-                    </Text>
-                    <View style={styles.infoRow}>
-                      <WeightIcon width={20} height={20} />
-                      <Text style={styles.infoText}>
-                        Weight : {shipment.weight}
-                      </Text>
-                    </View>
-                    <View style={styles.infoRow}>
-                      <DatePicker width={20} height={20} pathFill='#FFFCDD' />
-                      <Text style={styles.infoText}>
-                        Expected date : {shipment.expectedDate}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                {shipment.status === 'sent' ? (
-                  <View style={styles.sentStatus}>
-                    <SendIcon width={22} height={22}/>
-                    <Text style={styles.sentStatusText}>Request Sent</Text>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.chatButton}
-                    onPress={handleChat}
-                  >
-                    <MessageIcon  />
-                    <Text style={styles.chatButtonText}>
-                      Chat with the Shipment Owner
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          ))}
-        </ScrollView>
+        {renderContent()}
       </View>
     </SafeAreaView>
   );
@@ -299,5 +321,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#07875B',
     fontFamily: 'OpenSans_600SemiBold'
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: -70,
+  },
+  errorText: {
+    color: Colors.error,
+    fontSize: 16,
+    fontFamily: 'OpenSans_500Medium',
+  },
+  noDataText: {
+    color: Colors.primary,
+    fontSize: 16,
+    fontFamily: 'OpenSans_500Medium',
   },
 });

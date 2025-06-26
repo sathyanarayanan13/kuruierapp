@@ -37,7 +37,7 @@ interface Profile {
   currentRole: 'SHIPMENT_OWNER' | 'TRAVELLER';
 }
 
-interface Shipment {
+export interface Shipment {
   id: string;
   userId: string;
   packageType: string;
@@ -52,17 +52,7 @@ interface Shipment {
   updatedAt: string;
 }
 
-interface CreateShipmentRequest {
-  packageType: 'DOCUMENTS' | 'SNACKS' | 'CLOTHES' | 'ELECTRONICS' | 'OTHER';
-  estimatedDeliveryDate: string;
-  weightGrams: number;
-  destinationCountry: string;
-  lat_coordinates: string;
-  long_coordinates: string;
-  packageImage: any; 
-}
-
-interface Trip {
+export interface Trip {
   id: string;
   userId: string;
   pnrNumber: string;
@@ -75,6 +65,16 @@ interface Trip {
   long_coordinates: string;
   createdAt: string;
   updatedAt: string;
+}
+
+interface CreateShipmentRequest {
+  packageType: 'DOCUMENTS' | 'SNACKS' | 'CLOTHES' | 'ELECTRONICS' | 'OTHER';
+  estimatedDeliveryDate: string;
+  weightGrams: number;
+  destinationCountry: string;
+  lat_coordinates: string;
+  long_coordinates: string;
+  packageImage: any; 
 }
 
 interface CreateTripRequest {
