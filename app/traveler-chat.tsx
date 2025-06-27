@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   ImageBackground,
   ScrollView,
+  AppState,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/Colors';
@@ -21,7 +22,9 @@ import DeliveryPopup from '@/components/chat/DeliveryPopup';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import FlightRight from '@/assets/svgs/FlightRight';
 import NextIcon from '@/assets/svgs/NextIcon';
-import { getPredefinedMessages, ChatMessage } from '@/utils/api';
+import { getPredefinedMessages, ChatMessage, getStoredUser } from '@/utils/api';
+import WebSocketService from '@/utils/WebSocketService';
+import NotificationService from '@/utils/NotificationService';
 
 const initialMessages: ChatMessage[] = [
   {
@@ -52,11 +55,114 @@ export default function TravelerChatScreen() {
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [errorMessages, setErrorMessages] = useState<string | null>(null);
   const [sendingMessage, setSendingMessage] = useState(false);
+  
+  // WebSocket states
+  const [isConnected, setIsConnected] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+  const [otherUserName, setOtherUserName] = useState('Other User');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  
   const router = useRouter();
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const appState = useRef(AppState.currentState);
 
   useEffect(() => {
-    fetchPredefinedMessages();
+    initializeChat();
   }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        // App came to foreground
+        if (chatUnlocked) {
+          // Refresh messages if needed
+        }
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => subscription?.remove();
+  }, [chatUnlocked]);
+
+  const initializeChat = async () => {
+    try {
+      setLoadingMessages(true);
+      setErrorMessages(null);
+      
+      // Get current user
+      const user = await getStoredUser();
+      setCurrentUserId(user?.id || null);
+      
+      // Initialize WebSocket connection if not connected
+      if (!WebSocketService.isSocketConnected()) {
+        await WebSocketService.connect();
+      }
+      
+      // Setup WebSocket listeners
+      setupWebSocketListeners();
+      
+      // Fetch predefined messages
+      const messages = await getPredefinedMessages();
+      setPredefinedMessages(messages);
+      
+      setIsConnected(true);
+      
+    } catch (err) {
+      setErrorMessages('Failed to load quick messages');
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  const setupWebSocketListeners = () => {
+    // New message received
+    WebSocketService.on('new_message', (message: ChatMessage) => {
+      setMessages(prev => [...prev, message]);
+      
+      // Show notification if app is in background
+      if (AppState.currentState !== 'active') {
+        NotificationService.scheduleLocalNotification(
+          otherUserName,
+          message.messageContent,
+          { matchId: 'temp', messageId: message.id }
+        );
+      }
+    });
+
+    // Typing indicators
+    WebSocketService.on('user_typing', (data: { userId: string; username: string }) => {
+      setTypingUsers(prev => {
+        const filtered = prev.filter(user => user !== data.username);
+        return [...filtered, data.username];
+      });
+    });
+
+    WebSocketService.on('typing_stop', (data: { userId: string; username: string }) => {
+      setTypingUsers(prev => prev.filter(user => user !== data.username));
+    });
+
+    // User online status
+    WebSocketService.on('user_online', (data: { userId: string; isOnline: boolean }) => {
+      setOnlineUsers(prev => {
+        if (data.isOnline) {
+          return prev.includes(data.userId) ? prev : [...prev, data.userId];
+        } else {
+          return prev.filter(id => id !== data.userId);
+        }
+      });
+    });
+
+    // Connection status
+    WebSocketService.on('connect', () => {
+      setIsConnected(true);
+    });
+
+    WebSocketService.on('disconnect', () => {
+      setIsConnected(false);
+    });
+  };
 
   const fetchPredefinedMessages = async () => {
     try {
@@ -76,6 +182,37 @@ export default function TravelerChatScreen() {
       router.back();
     } else {
       router.replace('/');
+    }
+  };
+
+  const handleTyping = (text: string) => {
+    setInputText(text);
+    
+    if (text.length > 0 && !isTyping) {
+      setIsTyping(true);
+      WebSocketService.startTyping('temp');
+    }
+    
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    // Set new timeout to stop typing
+    typingTimeoutRef.current = setTimeout(() => {
+      stopTyping();
+    }, 1000);
+  };
+
+  const stopTyping = () => {
+    if (isTyping) {
+      setIsTyping(false);
+      WebSocketService.stopTyping('temp');
+    }
+    
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
     }
   };
 
@@ -134,6 +271,7 @@ export default function TravelerChatScreen() {
       
       setMessages((prev) => [...prev, newMessage]);
       setInputText('');
+      stopTyping();
     }
   };
 
@@ -153,6 +291,7 @@ export default function TravelerChatScreen() {
     };
     
     setMessages((prev) => [...prev, newMessage]);
+    stopTyping();
   };
 
   const handleDeliveryConfirm = () => {
@@ -169,6 +308,13 @@ export default function TravelerChatScreen() {
     router.push('/shipment-status');
   };
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopTyping();
+    };
+  }, []);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -176,6 +322,11 @@ export default function TravelerChatScreen() {
           onBack={handleBack}
           onDeliveryInfo={() => setShowDeliveryConfirm(true)}
           chatUnlocked={chatUnlocked}
+          isConnected={isConnected}
+          isTyping={isTyping}
+          typingUsers={typingUsers}
+          onlineUsers={onlineUsers}
+          otherUserName={otherUserName}
         />
 
         {chatUnlocked && (
@@ -230,7 +381,7 @@ export default function TravelerChatScreen() {
           ) : chatUnlocked ? (
             <ChatInput
               value={inputText}
-              onChangeText={setInputText}
+              onChangeText={handleTyping}
               onSend={handleSendMessage}
               onSendMedia={handleSendMedia}
               disabled={sendingMessage}

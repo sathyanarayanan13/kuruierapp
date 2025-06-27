@@ -7,9 +7,10 @@ import {
   ImageBackground,
   ScrollView,
   RefreshControl,
+  AppState,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Colors from '@/constants/Colors';
 import ChatHeader from '@/components/chat/ChatHeader';
 import ChatMessages from '@/components/chat/ChatMessages';
@@ -34,9 +35,12 @@ import {
   sendMessage,
   ChatMessage,
   ChatAccess,
-  ChatMessagesResponse
+  ChatMessagesResponse,
+  getStoredUser
 } from '@/utils/api';
 import { useStripe } from '@stripe/stripe-react-native';
+import WebSocketService from '@/utils/WebSocketService';
+import NotificationService from '@/utils/NotificationService';
 
 const PAYMENT_AMOUNT = 200; // INR
 
@@ -60,12 +64,24 @@ export default function ChatScreen() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  
+  // WebSocket states
+  const [isConnected, setIsConnected] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+  const [otherUserName, setOtherUserName] = useState('Traveller 1');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  
   const router = useRouter();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [paymentSheetLoading, setPaymentSheetLoading] = useState(false);
   const [paymentSheetError, setPaymentSheetError] = useState<string | null>(null);
   const [paymentIntentClientSecret, setPaymentIntentClientSecret] = useState<string | null>(null);
   const { matchId } = useLocalSearchParams();
+  
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const appState = useRef(AppState.currentState);
 
   useEffect(() => {
     if (matchId) {
@@ -73,15 +89,18 @@ export default function ChatScreen() {
     }
   }, [matchId]);
 
-  // Set up periodic refresh for messages (every 10 seconds)
   useEffect(() => {
-    if (!matchId || !isPaid) return;
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        // App came to foreground
+        if (matchId && isPaid) {
+          refreshMessages();
+        }
+      }
+      appState.current = nextAppState;
+    });
 
-    const interval = setInterval(() => {
-      refreshMessages();
-    }, 10000);
-
-    return () => clearInterval(interval);
+    return () => subscription?.remove();
   }, [matchId, isPaid]);
 
   const initializeChat = async () => {
@@ -91,6 +110,21 @@ export default function ChatScreen() {
       setInitialLoading(true);
       setLoadingMessages(true);
       setErrorMessages(null);
+      
+      // Get current user
+      const user = await getStoredUser();
+      setCurrentUserId(user?.id || null);
+      
+      // Initialize WebSocket connection
+      if (!WebSocketService.isSocketConnected()) {
+        await WebSocketService.connect();
+      }
+      
+      // Join the chat room
+      WebSocketService.joinChat(matchId as string);
+      
+      // Setup WebSocket listeners
+      setupWebSocketListeners();
       
       // Fetch messages and chat access in one call
       const chatData: ChatMessagesResponse = await getChatMessages(matchId as string);
@@ -102,8 +136,16 @@ export default function ChatScreen() {
       // Check if chat is already paid/unlocked
       setIsPaid(chatData.chatAccess.unlockedByPayment);
       
+      // Set other user name
+      const otherUser = chatData.messages.find(msg => msg.senderId !== user?.id)?.sender;
+      if (otherUser) {
+        setOtherUserName(otherUser.username);
+      }
+      
       // Fetch predefined messages in parallel
       fetchPredefinedMessages();
+      
+      setIsConnected(true);
       
     } catch (err: any) {
       setErrorMessages(err.message || 'Failed to load chat');
@@ -112,6 +154,78 @@ export default function ChatScreen() {
       setLoadingMessages(false);
       setInitialLoading(false);
     }
+  };
+
+  const setupWebSocketListeners = () => {
+    // New message received
+    WebSocketService.on('new_message', (message: ChatMessage) => {
+      setMessages(prev => [...prev, message]);
+      
+      // Show notification if app is in background
+      if (AppState.currentState !== 'active') {
+        NotificationService.scheduleLocalNotification(
+          otherUserName,
+          message.messageContent,
+          { matchId, messageId: message.id }
+        );
+      }
+    });
+
+    // Typing indicators
+    WebSocketService.on('user_typing', (data: { userId: string; username: string }) => {
+      setTypingUsers(prev => {
+        const filtered = prev.filter(user => user !== data.username);
+        return [...filtered, data.username];
+      });
+    });
+
+    WebSocketService.on('typing_stop', (data: { userId: string; username: string }) => {
+      setTypingUsers(prev => prev.filter(user => user !== data.username));
+    });
+
+    // User online status
+    WebSocketService.on('user_online', (data: { userId: string; isOnline: boolean }) => {
+      setOnlineUsers(prev => {
+        if (data.isOnline) {
+          return prev.includes(data.userId) ? prev : [...prev, data.userId];
+        } else {
+          return prev.filter(id => id !== data.userId);
+        }
+      });
+    });
+
+    // Chat unlocked
+    WebSocketService.on('chat_unlocked', (data: any) => {
+      setIsPaid(true);
+      setCanSendFreeText(true);
+    });
+
+    // Message delivery confirmation
+    WebSocketService.on('message_delivered', (data: { messageId: string }) => {
+      setMessages(prev => prev.map(msg => 
+        msg.id === data.messageId 
+          ? { ...msg, delivered: true }
+          : msg
+      ));
+    });
+
+    // Message read confirmation
+    WebSocketService.on('message_read', (data: { messageId: string; readBy: string }) => {
+      setMessages(prev => prev.map(msg => 
+        msg.id === data.messageId 
+          ? { ...msg, read: true, readBy: data.readBy }
+          : msg
+      ));
+    });
+
+    // Connection status
+    WebSocketService.on('connect', () => {
+      setIsConnected(true);
+    });
+
+    WebSocketService.on('disconnect', () => {
+      setIsConnected(false);
+    });
   };
 
   const fetchChatData = async () => {
@@ -169,6 +283,11 @@ export default function ChatScreen() {
   };
 
   const handleBack = () => {
+    // Leave chat room when navigating back
+    if (matchId) {
+      WebSocketService.leaveChat(matchId as string);
+    }
+    
     if (router.canGoBack()) {
       router.back();
     } else {
@@ -176,10 +295,43 @@ export default function ChatScreen() {
     }
   };
 
+  const handleTyping = (text: string) => {
+    setInputText(text);
+    
+    if (text.length > 0 && !isTyping && matchId) {
+      setIsTyping(true);
+      WebSocketService.startTyping(matchId as string);
+    }
+    
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    // Set new timeout to stop typing
+    typingTimeoutRef.current = setTimeout(() => {
+      stopTyping();
+    }, 1000);
+  };
+
+  const stopTyping = () => {
+    if (isTyping && matchId) {
+      setIsTyping(false);
+      WebSocketService.stopTyping(matchId as string);
+    }
+    
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!inputText.trim() || !matchId || sendingMessage) return;
     
     setSendingMessage(true);
+    stopTyping();
+    
     try {
       const sentMessage = await sendMessage({
         matchId: matchId as string,
@@ -203,6 +355,8 @@ export default function ChatScreen() {
     if (!matchId || sendingMessage) return;
     
     setSendingMessage(true);
+    stopTyping();
+    
     try {
       const sentMessage = await sendMessage({
         matchId: matchId as string,
@@ -226,6 +380,8 @@ export default function ChatScreen() {
     if (!matchId || sendingMessage) return;
     
     setSendingMessage(true);
+    stopTyping();
+    
     try {
       const sentMessage = await sendMessage({
         matchId: matchId as string,
@@ -288,6 +444,16 @@ export default function ChatScreen() {
     }
   };
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (matchId) {
+        WebSocketService.leaveChat(matchId as string);
+      }
+      stopTyping();
+    };
+  }, [matchId]);
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={styles.container}>
@@ -298,6 +464,11 @@ export default function ChatScreen() {
           onDeliveryInfo={() => router.push('/package-delivery')}
           onShowMembers={() => setShowMembersDrawer(true)}
           isPaid={isPaid}
+          isConnected={isConnected}
+          isTyping={isTyping}
+          typingUsers={typingUsers}
+          onlineUsers={onlineUsers}
+          otherUserName={otherUserName}
         />
 
         {isPaid && (
@@ -363,7 +534,7 @@ export default function ChatScreen() {
           ) : (
             <ChatInput
               value={inputText}
-              onChangeText={setInputText}
+              onChangeText={handleTyping}
               onSend={handleSendMessage}
               onSendMedia={handleSendMedia}
               disabled={sendingMessage}

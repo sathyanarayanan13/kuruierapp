@@ -14,13 +14,50 @@ interface TravelerChatHeaderProps {
   onBack: () => void;
   onDeliveryInfo: () => void;
   chatUnlocked: boolean;
+  isConnected?: boolean;
+  isTyping?: boolean;
+  typingUsers?: string[];
+  onlineUsers?: string[];
+  otherUserName?: string;
 }
 
 export default function TravelerChatHeader({
   onBack,
   onDeliveryInfo,
   chatUnlocked,
+  isConnected = true,
+  isTyping = false,
+  typingUsers = [],
+  onlineUsers = [],
+  otherUserName = 'Shipment Owner'
 }: TravelerChatHeaderProps) {
+  const renderStatusText = () => {
+    if (isTyping && typingUsers.length > 0) {
+      const typingNames = typingUsers.join(', ');
+      return (
+        <Text style={styles.typingText}>
+          {typingNames} {typingUsers.length === 1 ? 'is' : 'are'} typing...
+        </Text>
+      );
+    }
+    
+    if (isConnected) {
+      return (
+        <View style={styles.onlineStatus}>
+          <View style={[styles.onlineDot, { backgroundColor: Colors.success }]} />
+          <Text style={[styles.onlineText, { color: Colors.success }]}>Online</Text>
+        </View>
+      );
+    }
+    
+    return (
+      <View style={styles.onlineStatus}>
+        <View style={[styles.onlineDot, { backgroundColor: Colors.error }]} />
+        <Text style={[styles.onlineText, { color: Colors.error }]}>Offline</Text>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.header}>
       <View style={styles.headerContent}>
@@ -37,12 +74,9 @@ export default function TravelerChatHeader({
           />
           <View>
             <Text style={styles.userName} semiBold>
-              Shipment Owner
+              {otherUserName}
             </Text>
-            <View style={styles.onlineStatus}>
-              <View style={styles.onlineDot} />
-              <Text style={styles.onlineText}>Online</Text>
-            </View>
+            {renderStatusText()}
           </View>
         </View>
         {chatUnlocked ? (
@@ -101,12 +135,16 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.success,
   },
   onlineText: {
     fontSize: 14,
-    color: Colors.success,
     fontFamily: 'OpenSans_600SemiBold'
+  },
+  typingText: {
+    fontSize: 14,
+    color: Colors.mainTheme,
+    fontFamily: 'OpenSans_400Regular',
+    fontStyle: 'italic',
   },
   actionButton: {
     width: 40,

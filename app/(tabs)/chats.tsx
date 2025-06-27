@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -11,6 +11,7 @@ import {
   Dimensions,
   FlatList,
   TextInput,
+  AppState,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import Text from '@/components/Text';
@@ -31,6 +32,8 @@ import { Search } from 'lucide-react-native';
 import ChatListItem from '@/components/chat/ChatListItem';
 import { getChats, ChatListItem as ChatListItemType } from '@/utils/api';
 import { useUserRole } from '@/utils/UserContext';
+import WebSocketService from '@/utils/WebSocketService';
+import NotificationService from '@/utils/NotificationService';
 
 const airports = ['New York Airport', 'London Heathrow', 'Dubai International'];
 const radiusOptions = ['5 km', '10 km', '15 km', '20 km'];
@@ -43,10 +46,92 @@ export default function ChatTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { userRole } = useUserRole();
+  
+  // WebSocket states
+  const [isConnected, setIsConnected] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+  const appState = useRef(AppState.currentState);
 
   useEffect(() => {
     fetchChats();
+    setupWebSocketListeners();
   }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        // App came to foreground - refresh chats
+        fetchChats();
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => subscription?.remove();
+  }, []);
+
+  const setupWebSocketListeners = () => {
+    // New message received - update chat list
+    WebSocketService.on('new_message', (message: any) => {
+      // Update the chat list to show the new message
+      setChats(prev => {
+        const updatedChats = prev.map(chat => {
+          if (chat.matchId === message.matchId) {
+            return {
+              ...chat,
+              match: {
+                ...chat.match,
+                chats: [...chat.match.chats, message]
+              }
+            };
+          }
+          return chat;
+        });
+        return updatedChats;
+      });
+      
+      // Show notification if app is in background
+      if (AppState.currentState !== 'active') {
+        const chat = chats.find(c => c.matchId === message.matchId);
+        if (chat) {
+          const otherUser = userRole === 'SHIPMENT_OWNER'
+            ? chat.match.trip.user
+            : chat.match.shipment.user;
+          
+          NotificationService.scheduleLocalNotification(
+            otherUser.username,
+            message.messageContent,
+            { matchId: message.matchId, messageId: message.id }
+          );
+        }
+      }
+    });
+
+    // User online status
+    WebSocketService.on('user_online', (data: { userId: string; isOnline: boolean }) => {
+      setOnlineUsers(prev => {
+        if (data.isOnline) {
+          return prev.includes(data.userId) ? prev : [...prev, data.userId];
+        } else {
+          return prev.filter(id => id !== data.userId);
+        }
+      });
+    });
+
+    // Chat unlocked
+    WebSocketService.on('chat_unlocked', (data: any) => {
+      // Refresh chats to show updated status
+      fetchChats();
+    });
+
+    // Connection status
+    WebSocketService.on('connect', () => {
+      setIsConnected(true);
+    });
+
+    WebSocketService.on('disconnect', () => {
+      setIsConnected(false);
+    });
+  };
 
   const fetchChats = async () => {
     setLoading(true);
@@ -116,6 +201,10 @@ export default function ChatTab() {
     const lastMessage = lastMsg ? lastMsg.messageContent : '';
     const lastTime = lastMsg ? new Date(lastMsg.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
     const type: 'direct' = 'direct';
+    
+    // Check if user is online (you can implement this based on your backend)
+    const isOnline = onlineUsers.includes(otherUser.id);
+    
     return (
       <TouchableOpacity 
          onPress={() => { router.push({ pathname: '/chat', params: { matchId: item.matchId } }) }}
@@ -154,6 +243,15 @@ export default function ChatTab() {
                 <Text style={styles.title} color="secondary" semiBold>
                   Chats
                 </Text>
+                {/* <View style={styles.connectionStatus}>
+                  <View style={[
+                    styles.statusDot, 
+                    { backgroundColor: isConnected ? Colors.success : Colors.error }
+                  ]} />
+                  <Text style={styles.statusText}>
+                    {isConnected ? 'Connected' : 'Disconnected'}
+                  </Text>
+                </View> */}
               </View>
             </View>
           </ImageBackground>
@@ -244,6 +342,21 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'OpenSans_600SemiBold',
   },
+  connectionStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
+    fontSize: 10,
+    color: Colors.secondary,
+    fontFamily: 'OpenSans_400Regular',
+  },
   searchContainerWrapper: {
     paddingHorizontal: 16,
     paddingBottom: 16,
@@ -271,3 +384,4 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
 });
+
