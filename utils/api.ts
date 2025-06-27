@@ -96,6 +96,117 @@ interface CreateTripResponse {
   };
 }
 
+export interface PredefinedMessagesResponse {
+  messages: string[];
+}
+
+export interface ChatInitiateResponse {
+  matchId: string;
+  chatAccess: {
+    id: string;
+    shipmentId: string;
+    tripId: string;
+    matchId: string;
+    isBonus: boolean;
+    unlockedByPayment: boolean;
+    unlockedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+  canSendFreeText: boolean;
+}
+
+export interface ChatUser {
+  id: string;
+  username: string;
+  currentRole: 'SHIPMENT_OWNER' | 'TRAVELLER';
+}
+
+export interface ChatShipment {
+  id: string;
+  userId: string;
+  packageType: string;
+  estimatedDeliveryDate: string;
+  weightGrams: number;
+  destinationCountry: string;
+  packageImageUrl: string;
+  status: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED';
+  lat_coordinates: string;
+  long_coordinates: string;
+  createdAt: string;
+  updatedAt: string;
+  user: ChatUser;
+}
+
+export interface ChatTrip {
+  id: string;
+  userId: string;
+  pnrNumber: string;
+  fromCountry: string;
+  toCountry: string;
+  departureDate: string;
+  status: 'ACCEPTING' | 'IN_TRANSIT' | 'COMPLETED';
+  flightInfo: string;
+  lat_coordinates: string;
+  long_coordinates: string;
+  createdAt: string;
+  updatedAt: string;
+  user: ChatUser;
+}
+
+export interface ChatMessage {
+  id: string;
+  matchId: string;
+  senderId: string;
+  messageType: string;
+  messageContent: string;
+  fileUrl: string | null;
+  fileName: string | null;
+  fileSize: number | null;
+  isPredefined: boolean;
+  createdAt: string;
+  sender: { id: string; username: string };
+}
+
+export interface ChatAccess {
+  id: string;
+  shipmentId: string;
+  tripId: string;
+  matchId: string;
+  isBonus: boolean;
+  unlockedByPayment: boolean;
+  unlockedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessagesResponse {
+  messages: ChatMessage[];
+  chatAccess: ChatAccess;
+  canSendFreeText: boolean;
+}
+
+export interface ChatMatch {
+  id: string;
+  shipmentId: string;
+  tripId: string;
+  createdAt: string;
+  updatedAt: string;
+  shipment: ChatShipment;
+  trip: ChatTrip;
+  chatAccess: any[];
+  chats: ChatMessage[];
+}
+
+export interface ChatListItem {
+  id: string;
+  matchId: string;
+  userId: string;
+  roleInChat: 'SHIPMENT_OWNER' | 'TRAVELLER';
+  joinedAt: string;
+  match: ChatMatch;
+}
+
 async function apiCall<T>(
   endpoint: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
@@ -244,6 +355,11 @@ export async function getShipments(): Promise<Shipment[]> {
   return response.data!;
 }
 
+export async function getMyShipments(): Promise<Shipment[]> {
+  const response = await apiCall<Shipment[]>('/shipments/v1/my-shipments', 'GET');
+  return response.data!;
+}
+
 export async function createShipment(data: CreateShipmentRequest): Promise<Shipment> {
   const formData = new FormData();
   
@@ -274,4 +390,229 @@ export async function getTrips(): Promise<Trip[]> {
 export async function createTrip(data: CreateTripRequest): Promise<CreateTripResponse> {
   const response = await apiCall<CreateTripResponse>('/trips/v1', 'POST', data);
   return response.data!;
+}
+
+export async function getPredefinedMessages(): Promise<string[]> {
+  const response = await apiCall<PredefinedMessagesResponse>('/chat/v1/predefined-messages', 'GET');
+  return response.data?.messages || [];
+}
+
+export async function initiateChat(shipmentId: string, tripId: string): Promise<ChatInitiateResponse> {
+  const response = await apiCall<{ matchId: string; chatAccess: ChatInitiateResponse["chatAccess"]; canSendFreeText: boolean }>(
+    '/chat/v1/initiate',
+    'POST',
+    { shipmentId, tripId }
+  );
+  if (!response.success || !response.data) throw new Error(response.message || 'Something went wrong');
+  return response.data;
+}
+
+export async function getChats(): Promise<ChatListItem[]> {
+  const response = await apiCall<ChatListItem[]>('/chat/v1/chats', 'GET');
+  if (!response.success || !response.data) throw new Error(response.message || 'Failed to fetch chats');
+  return response.data;
+}
+
+/**
+ * Create a PaymentIntent for a chat match
+ * @param matchId - The match/chat ID
+ * @param amount - Amount in INR (e.g., 200 for ₹200)
+ * @returns clientSecret string
+ */
+export async function createPaymentIntent(matchId: string, amount: number): Promise<string> {
+  const response = await apiCall<{ clientSecret: string }>(
+    '/payments/v1/create-intent',
+    'POST',
+    { matchId, amount, currency: 'inr' }
+  );
+  if (!response.success || !response.data) throw new Error(response.message || 'Failed to create payment intent');
+  return response.data.clientSecret;
+}
+
+/**
+ * Confirm payment and unlock chat
+ * @param clientSecret - The PaymentIntent client secret
+ * @returns the full data object from the backend (including success, message, paymentIntent, chatAccess, etc.)
+ */
+export async function confirmPayment(clientSecret: string): Promise<any> {
+  const response = await apiCall<any>(
+    '/payments/v1/confirm',
+    'POST',
+    { clientSecret }
+  );
+  // Accept both response.success and response.data?.success as valid
+  if (!response.success && !(response.data && response.data.success)) {
+    throw new Error(response.message || 'Failed to confirm payment');
+  }
+  return response.data;
+}
+
+/**
+ * Helper to get MIME type from file extension
+ */
+export function getMimeType(uri: string): string {
+  const extension = uri.split('.').pop()?.toLowerCase();
+  switch (extension) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'gif':
+      return 'image/gif';
+    case 'webp':
+      return 'image/webp';
+    case 'pdf':
+      return 'application/pdf';
+    case 'doc':
+      return 'application/msword';
+    case 'docx':
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    case 'mp3':
+      return 'audio/mpeg';
+    case 'wav':
+      return 'audio/wav';
+    case 'ogg':
+      return 'audio/ogg';
+    case 'mp4':
+      return 'audio/mp4';
+    case 'webm':
+      return 'audio/webm';
+    case 'm4a':
+      return 'audio/m4a';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
+/**
+ * Helper to construct the correct file URL based on message type and backend directory structure
+ * @param fileUrl - The file URL from the backend response
+ * @param messageType - The type of message (IMAGE, FILE, VOICE_NOTE)
+ * @returns Complete file URL
+ */
+export function getFileUrl(fileUrl: string | null, messageType: string): string | null {
+  if (!fileUrl) return null;
+    
+  // If it's already a full URL, return as is
+  if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+    return fileUrl;
+  }
+  
+  // If it's a local file:// URI, return as is
+  if (fileUrl.startsWith('file://')) {
+    return fileUrl;
+  }
+  
+  // Construct URL based on backend directory structure
+  const baseUrl = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || 'http://194.164.150.61:3000';
+  
+  // Remove leading slash if present
+  const cleanFileUrl = fileUrl.startsWith('/') ? fileUrl.slice(1) : fileUrl;
+  
+  // Check if the fileUrl already contains the correct directory structure
+  if (cleanFileUrl.includes('uploads/chat/')) {
+    // File already has the correct path, use as is
+    const finalUrl = `${baseUrl}/${cleanFileUrl}`;
+    return finalUrl;
+  }
+  
+  // If not, construct the path based on message type
+  // Note: Based on the logs, it seems the backend is saving all files in uploads/chat/
+  // rather than the specific subdirectories we expected
+  const fileName = cleanFileUrl.split('/').pop() || cleanFileUrl;
+  const finalUrl = `${baseUrl}/uploads/chat/${fileName}`;
+  
+  return finalUrl;
+}
+
+/**
+ * Helper to get the appropriate directory for file uploads based on message type
+ * @param messageType - The type of message (IMAGE, FILE, VOICE_NOTE)
+ * @returns Directory path
+ */
+export function getUploadDirectory(messageType: string): string {
+  switch (messageType) {
+    case 'IMAGE':
+      return 'uploads/chat/images';
+    case 'VOICE_NOTE':
+      return 'uploads/chat/voice';
+    case 'FILE':
+      return 'uploads/chat/files';
+    default:
+      return 'uploads/chat/files';
+  }
+}
+
+/**
+ * Send a chat message (text, file, image, or voice)
+ * @param params - matchId, messageContent, messageType, isPredefined, file (optional)
+ * @returns sent message data
+ */
+export async function sendMessage({
+  matchId,
+  messageContent,
+  messageType,
+  isPredefined,
+  fileUri,
+}: {
+  matchId: string;
+  messageContent: string;
+  messageType: 'TEXT' | 'IMAGE' | 'FILE' | 'VOICE_NOTE';
+  isPredefined: boolean;
+  fileUri?: string;
+}): Promise<any> {
+  const formData = new FormData();
+  formData.append('matchId', matchId);
+  formData.append('messageContent', messageContent);
+  formData.append('messageType', messageType);
+  formData.append('isPredefined', isPredefined ? 'true' : 'false');
+  
+  if (fileUri) {
+    // Note: Backend seems to save all files in uploads/chat/ directory
+    // formData.append('uploadDirectory', uploadDir);
+    
+    formData.append('file', {
+      uri: fileUri,
+      name: fileUri.split('/').pop() || 'file',
+      type: getMimeType(fileUri),
+    } as any);
+  }
+  
+  const accessToken = await AsyncStorage.getItem('access_token');
+  const response = await fetch(`${API_URL}/chat/v1/message`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      // 'Content-Type' is set automatically for FormData
+    },
+    body: formData,
+  });
+  const data = await response.json();
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || 'Failed to send message');
+  }
+  return data.data;
+}
+
+/**
+ * Get chat messages and access details for a specific match
+ * @param matchId - The match ID
+ * @returns messages, chatAccess, and canSendFreeText
+ */
+export async function getChatMessages(matchId: string): Promise<ChatMessagesResponse> {
+  const response = await apiCall<ChatMessagesResponse>(`/chat/v1/${matchId}/messages`, 'GET');
+  if (!response.success || !response.data) throw new Error(response.message || 'Failed to fetch messages');
+  return response.data;
+}
+
+/**
+ * Get chat details and messages for a specific match
+ * @param matchId - The match ID
+ * @returns chat details with messages
+ */
+export async function getChatDetails(matchId: string): Promise<ChatMatch> {
+  const response = await apiCall<ChatMatch>(`/chat/v1/chats/${matchId}`, 'GET');
+  if (!response.success || !response.data) throw new Error(response.message || 'Failed to fetch chat details');
+  return response.data;
 }

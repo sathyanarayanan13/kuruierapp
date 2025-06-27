@@ -1,5 +1,5 @@
 import Package from '@/assets/svgs/Package';
-import React from 'react'; // No useEffect needed for this animation approach
+import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
@@ -8,12 +8,12 @@ import ProfileIcon from '@/assets/svgs/ProfileIcon';
 import TravellerIcon from '@/assets/svgs/TravellerIcon';
 import FlightRight from '@/assets/svgs/FlightRight';
 
-// Placeholder icons, replace with your actual icons
+// Tab icons
 const TabIcons = {
   Travelers: FlightRight,
   Packages: Package,
-  Owners: ProfileIcon,
-  Shipments: Package,
+  Couriers: ProfileIcon,
+  Travels: Package,
   Chats: ChatIcon,
   Profile: ProfileIcon,
 };
@@ -22,8 +22,8 @@ interface CustomTabBarProps {
   state: any;
   descriptors: any;
   navigation: any;
-  showOwnerTabs?: boolean; // If true, show Owners/Shipments, else Travelers/Packages
-  visible?: boolean; // If false, hide the tab bar
+  showOwnerTabs?: boolean; // If true, show Couriers/Travels, else Travelers/Packages
+  visible?: boolean;
 }
 
 const CustomTabBar: React.FC<CustomTabBarProps> = ({
@@ -34,33 +34,50 @@ const CustomTabBar: React.FC<CustomTabBarProps> = ({
   visible = true,
 }) => {
   const insets = useSafeAreaInsets();
+  
   if (!visible) return null;
 
-  // Tab config
+  // Tab configuration based on user role
   const tabConfig = [
-    showOwnerTabs
-      ? { key: 'Owners', label: 'Couriers', icon: TabIcons.Owners, route: 'owners' }
-      : { key: 'Travelers', label: 'Travellers', icon: TabIcons.Travelers, route: 'travelers-list' },
-    showOwnerTabs
-      ? { key: 'Shipments', label: 'Travel\'s', icon: TabIcons.Shipments, route: 'shipments' }
-      : { key: 'Packages', label: 'Packages', icon: TabIcons.Packages, route: 'package-details' },
-    { key: 'Chats', label: 'Chats', icon: TabIcons.Chats, route: 'chat' },
-    { key: 'Profile', label: 'Profile', icon: TabIcons.Profile, route: 'profile' },
+    {
+      key: showOwnerTabs ? 'Couriers' : 'Travelers',
+      label: showOwnerTabs ? 'Couriers' : 'Travellers',
+      icon: showOwnerTabs ? TabIcons.Couriers : TabIcons.Travelers,
+      route: showOwnerTabs ? 'couriers' : 'travelers'
+    },
+    {
+      key: showOwnerTabs ? 'Travels' : 'Packages',
+      label: showOwnerTabs ? 'Travel\'s' : 'Packages',
+      icon: showOwnerTabs ? TabIcons.Travels : TabIcons.Packages,
+      route: showOwnerTabs ? 'travels' : 'packages'
+    },
+    {
+      key: 'Chats',
+      label: 'Chats',
+      icon: TabIcons.Chats,
+      route: 'chats'
+    },
+    {
+      key: 'Profile',
+      label: 'Profile',
+      icon: TabIcons.Profile,
+      route: 'profile'
+    },
   ];
 
   return (
     <View style={[styles.tabBar, { paddingBottom: insets.bottom }]}> 
-      {tabConfig.map((tab, idx) => {
-        const isFocused = state.index === idx;
-        const IconComponent = tab.icon; // Get the SVG component
-        const route = state.routes[idx];
+      {tabConfig.map((tab, index) => {
+        const route = state.routes.find((r: any) => r.name === tab.route);
+        const isFocused = route && state.index === state.routes.findIndex((r: any) => r.name === route.name);
+        const IconComponent = tab.icon;
 
-         // Define animated style for the *content* of the active tab button
-        const animatedActiveContentStyle = useAnimatedStyle(() => {
+        // Animated style for active tab
+        const animatedStyle = useAnimatedStyle(() => {
           return {
             transform: [
-              { translateY: withSpring(isFocused ? -20 : 0) }, // Animate vertical position
-              { scale: withSpring(isFocused ? 1.1 : 1) }, // Animate scale
+              { translateY: withSpring(isFocused ? -20 : 0) },
+              { scale: withSpring(isFocused ? 1.1 : 1) },
             ],
           };
         });
@@ -71,25 +88,33 @@ const CustomTabBar: React.FC<CustomTabBarProps> = ({
             accessibilityRole="button"
             accessibilityState={isFocused ? { selected: true } : {}}
             onPress={() => {
-              const event = navigation.emit({
-                type: 'tabPress',
-                target: route.key,
-                canPreventDefault: true,
-              });
-              if (!isFocused && !event.defaultPrevented) {
-                navigation.navigate(tab.route, route.params); // Pass params if any
+              if (route) {
+                const event = navigation.emit({
+                  type: 'tabPress',
+                  target: route.key,
+                  canPreventDefault: true,
+                });
+                if (!isFocused && !event.defaultPrevented) {
+                  navigation.navigate(tab.route);
+                }
               }
             }}
             style={styles.tabButton}
             activeOpacity={0.8}
           >
-             {/* Apply animation to the content wrapper */}
-            <Animated.View style={animatedActiveContentStyle}>
-               <View style={isFocused ? styles.activeIconWrapper : styles.iconWrapper}>
-                  <IconComponent width={isFocused ? 22 : 22} height={isFocused ? 22 : 22} fill={isFocused ? '#fff' : 'none'} stroke={!isFocused && '#48507E'}/>
-               </View>
-               <Text style={isFocused ? styles.activeLabel : styles.label}>{tab.label}</Text>
-             </Animated.View>
+            <Animated.View style={animatedStyle}>
+              <View style={isFocused ? styles.activeIconWrapper : styles.iconWrapper}>
+                <IconComponent 
+                  width={22} 
+                  height={22} 
+                  fill={isFocused ? '#fff' : 'none'} 
+                  stroke={!isFocused ? '#48507E' : undefined}
+                />
+              </View>
+              <Text style={isFocused ? styles.activeLabel : styles.label}>
+                {tab.label}
+              </Text>
+            </Animated.View>
           </TouchableOpacity>
         );
       })}

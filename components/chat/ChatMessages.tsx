@@ -1,80 +1,159 @@
-import { ScrollView, View, StyleSheet, Image } from 'react-native';
-import { useRef } from 'react';
+import { ScrollView, View, StyleSheet, Image, TouchableOpacity, Modal } from 'react-native';
+import { useRef, useState, useEffect } from 'react';
 import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
 import BouncingDotsLoader from '@/components/chat/BouncingDotsLoader';
-
-interface Message {
-  id: string;
-  text: string;
-  sent: boolean;
-}
+import VoicePlayer from '@/components/chat/VoicePlayer';
+import FileViewer from '@/components/chat/FileViewer';
+import { ChatMessage, getFileUrl } from '@/utils/api';
+import { getStoredUser } from '@/utils/api';
 
 interface ChatMessagesProps {
-  messages: Message[];
+  messages: ChatMessage[];
 }
 
 export default function ChatMessages({ messages }: ChatMessagesProps) {
   const scrollViewRef = useRef<ScrollView>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const getCurrentUser = async () => {
+      const user = await getStoredUser();
+      setCurrentUserId(user?.id || null);
+    };
+    getCurrentUser();
+  }, []);
+
+  const renderMessageContent = (message: ChatMessage) => {
+    switch (message.messageType) {
+      case 'TEXT':
+        return (
+          <Text
+            style={[
+              styles.messageText,
+              message.senderId === currentUserId
+                ? styles.sentMessageText
+                : styles.receivedMessageText,
+            ]}
+          >
+            {message.messageContent}
+          </Text>
+        );
+      case 'IMAGE':
+        return (
+          <TouchableOpacity onPress={() => setSelectedImage(getFileUrl(message.fileUrl, 'IMAGE') || '')}>
+            <Image
+              source={{ uri: getFileUrl(message.fileUrl, 'IMAGE') || '' }}
+              style={styles.messageImage}
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
+        );
+      case 'FILE':
+        return (
+          <FileViewer
+            uri={getFileUrl(message.fileUrl, 'FILE') || ''}
+            fileName={message.fileName || 'File'}
+            fileSize={message.fileSize || 0}
+          />
+        );
+      case 'VOICE_NOTE':
+        return (
+          <VoicePlayer
+            uri={getFileUrl(message.fileUrl, 'VOICE_NOTE') || ''}
+            fileName={message.fileName || 'Voice Message'}
+          />
+        );
+      default:
+        return (
+          <Text
+            style={[
+              styles.messageText,
+              message.senderId === currentUserId
+                ? styles.sentMessageText
+                : styles.receivedMessageText,
+            ]}
+          >
+            {message.messageContent}
+          </Text>
+        );
+    }
+  };
 
   return (
-    <ScrollView
-      ref={scrollViewRef}
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      onContentSizeChange={() =>
-        scrollViewRef.current?.scrollToEnd({ animated: true })
-      }
-    >
-      {messages.map((message, index) => {
-        const showAvatar =
-          index === 0 || messages[index - 1].sent !== message.sent;
+    <>
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        onContentSizeChange={() =>
+          scrollViewRef.current?.scrollToEnd({ animated: true })
+        }
+      >
+        {messages.map((message, index) => {
+          const isSent = message.senderId === currentUserId;
+          const showAvatar =
+            index === 0 || messages[index - 1].senderId !== message.senderId;
 
-        return (
-          <View key={message.id}>
-            {showAvatar && (
-              <Image
-                source={{
-                  uri: message.sent
-                    ? 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg'
-                    : 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg',
-                }}
-                style={[ { marginBottom: 5 } ,message.sent ? styles.avatar : styles.receiverAvatar]}
-              />
-            )}
-            <View
-              style={[
-                styles.messageContainer,
-                message.sent ? styles.sentMessage : styles.receivedMessage,
-              ]}
-            >
-              <Text
+          return (
+            <View key={message.id}>
+              {showAvatar && (
+                <Image
+                  source={{
+                    uri: isSent
+                      ? 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg'
+                      : 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg',
+                  }}
+                  style={[{ marginBottom: 5 }, isSent ? styles.avatar : styles.receiverAvatar]}
+                />
+              )}
+              <View
                 style={[
-                  styles.messageText,
-                  message.sent
-                    ? styles.sentMessageText
-                    : styles.receivedMessageText,
+                  styles.messageContainer,
+                  message.messageType === 'IMAGE' ? styles.imageMessage : 
+                  isSent ? styles.sentMessage : styles.receivedMessage,
                 ]}
               >
-                {message.text}
-              </Text>
+                {renderMessageContent(message)}
+              </View>
             </View>
-          </View>
-        );
-      })}
+          );
+        })}
 
-      <View>
-        <Image
-          source={{
-            uri: 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg',
-          }}
-          style={[ { marginBottom: 5 } , styles.receiverAvatar]}
-        />
-        <View style={[styles.messageContainer, styles.receivedMessage]}>
-          <BouncingDotsLoader />
+        <View>
+          <Image
+            source={{
+              uri: 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg',
+            }}
+            style={[{ marginBottom: 5 }, styles.receiverAvatar]}
+          />
+          <View style={[styles.messageContainer, styles.receivedMessage]}>
+            <BouncingDotsLoader />
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+
+      {/* Image Modal */}
+      <Modal
+        visible={!!selectedImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedImage(null)}
+      >
+        <TouchableOpacity
+          style={styles.imageModalOverlay}
+          activeOpacity={1}
+          onPress={() => setSelectedImage(null)}
+        >
+          <Image
+            source={{ uri: selectedImage || '' }}
+            style={styles.fullScreenImage}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+      </Modal>
+    </>
   );
 }
 
@@ -131,5 +210,50 @@ const styles = StyleSheet.create({
   },
   receivedMessageText: {
     color: Colors.primary,
+  },
+  messageImage: {
+    width: 200,
+    height: 150,
+    borderRadius: 8,
+  },
+  imageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenImage: {
+    width: '100%',
+    height: '100%',
+  },
+  fileContainer: {
+    padding: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+  },
+  fileName: {
+    fontSize: 14,
+    fontFamily: 'OpenSans_600SemiBold',
+    color: Colors.secondary,
+  },
+  fileSize: {
+    fontSize: 12,
+    fontFamily: 'OpenSans_400Regular',
+    color: Colors.secondary,
+    opacity: 0.8,
+  },
+  voiceContainer: {
+    padding: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+  },
+  voiceText: {
+    fontSize: 14,
+    fontFamily: 'OpenSans_400Regular',
+    color: Colors.secondary,
+  },
+  imageMessage: {
+    backgroundColor: 'transparent',
+    padding: 0,
   },
 });

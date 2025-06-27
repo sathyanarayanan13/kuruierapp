@@ -6,26 +6,34 @@ type UserRole = 'SHIPMENT_OWNER' | 'TRAVELLER';
 interface UserContextType {
   userRole: UserRole;
   setUserRole: (role: UserRole) => void;
+  isLoading: boolean;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [userRole, setUserRole] = useState<UserRole>('SHIPMENT_OWNER');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Load initial role from stored user data
     const loadUserRole = async () => {
-      const user = await getStoredUser();
-      if (user?.currentRole) {
-        setUserRole(user.currentRole);
+      try {
+        const user = await getStoredUser();
+        if (user?.currentRole) {
+          setUserRole(user.currentRole);
+        }
+      } catch (error) {
+        console.error('Error loading user role:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
+
     loadUserRole();
   }, []);
 
   return (
-    <UserContext.Provider value={{ userRole, setUserRole }}>
+    <UserContext.Provider value={{ userRole, setUserRole, isLoading }}>
       {children}
     </UserContext.Provider>
   );

@@ -27,7 +27,7 @@ import FlightRight from '@/assets/svgs/FlightRight';
 import AddIcon from '@/assets/svgs/AddIcon';
 import People from '@/assets/svgs/People';
 import TravelerSelectIcon from '@/assets/svgs/TravelerSelectIcon';
-import { getShipments } from '@/utils/api';
+import { getMyShipments } from '@/utils/api';
 
 const airports = ['New York Airport', 'London Heathrow', 'Dubai International'];
 const radiusOptions = ['5 km', '10 km', '15 km', '20 km'];
@@ -126,7 +126,7 @@ export default function PackageDetailsTab() {
   const fetchShipments = async () => {
     try {
       setLoading(true);
-      const data = await getShipments();
+      const data = await getMyShipments();
       setShipments(data);
       setError(null);
     } catch (err) {

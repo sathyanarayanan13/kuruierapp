@@ -13,6 +13,7 @@ import CheckmarkIcon from '@/assets/svgs/AddIcon'; // Placeholder, replace with 
 import { Check } from 'lucide-react-native';
 import { updateProfile } from '@/utils/api';
 import { validateName, validateMobileNumber, validateEmail } from '@/utils/validation';
+import { useUserRole } from '@/utils/UserContext';
 // Placeholder images for role illustrations
 const TravelerIllustration = require('@/assets/images/traveller.png'); // Replace with actual Traveller illustration
 const ShipmentOwnerIllustration = require('@/assets/images/owner.png'); // Replace with actual Shipment Owner illustration
@@ -21,6 +22,7 @@ export default function EditProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const initialData = params.initialData ? JSON.parse(params.initialData as string) : null;
+  const { setUserRole } = useUserRole();
 
   const [name, setName] = useState(initialData?.username || '');
   const [mobile, setMobile] = useState(initialData?.mobileNumber || '');
@@ -48,6 +50,10 @@ export default function EditProfileScreen() {
 
       setLoading(true);
       await updateProfile(name, mail, mobile, selectedRole);
+      
+      // Update the user role context immediately
+      setUserRole(selectedRole);
+      
       Alert.alert('Success', 'Profile updated successfully', [
         {
           text: 'OK',

@@ -1,5 +1,5 @@
 import { View, StyleSheet, TextInput, TextInputProps } from 'react-native';
-import { Video as LucideIcon } from 'lucide-react-native';
+import { LucideIcon } from 'lucide-react-native';
 import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
 

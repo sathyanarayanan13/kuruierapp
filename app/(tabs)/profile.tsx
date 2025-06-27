@@ -29,6 +29,7 @@ export default function ProfileScreen() {
       setLoading(true);
       const data = await getProfile();
       setProfileData(data);
+      // Update the user role context with the latest role from server
       setUserRole(data.currentRole);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to fetch profile data');

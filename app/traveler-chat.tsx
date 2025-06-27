@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,7 +9,6 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
 import Colors from '@/constants/Colors';
 import TravelerChatHeader from '@/components/chat/TravelerChatHeader';
 import ChatMessages from '@/components/chat/ChatMessages';
@@ -18,36 +18,29 @@ import OtpVerificationDrawer from '@/components/chat/OtpVerificationDrawer';
 import SuccessPopup from '@/components/SuccessPopup';
 import Text from '@/components/Text';
 import DeliveryPopup from '@/components/chat/DeliveryPopup';
+import LoadingSpinner from '@/components/LoadingSpinner';
 import FlightRight from '@/assets/svgs/FlightRight';
 import NextIcon from '@/assets/svgs/NextIcon';
+import { getPredefinedMessages, ChatMessage } from '@/utils/api';
 
-interface Message {
-  id: string;
-  text: string;
-  sent: boolean;
-}
-
-const initialMessages = [
+const initialMessages: ChatMessage[] = [
   {
     id: '1',
-    text: 'Hello 👋',
-    sent: false,
+    matchId: 'temp',
+    senderId: 'other',
+    messageType: 'TEXT',
+    messageContent: 'Hello 👋',
+    fileUrl: null,
+    fileName: null,
+    fileSize: null,
+    isPredefined: false,
+    createdAt: new Date().toISOString(),
+    sender: { id: 'other', username: 'Other User' }
   },
 ];
 
-const predefinedMessages = [
-  'I am ready to accept',
-  'Available!',
-  'I accept only snacks',
-  '<200g',
-  '<500g',
-  'I accept only documents',
-  '<1Kg',
-  '<2Kg',
-];
-
 export default function TravelerChatScreen() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [showReadyMessage, setShowReadyMessage] = useState(true);
   const [chatUnlocked, setChatUnlocked] = useState(false);
   const [inputText, setInputText] = useState('');
@@ -55,7 +48,28 @@ export default function TravelerChatScreen() {
   const [showOtpVerification, setShowOtpVerification] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showDeliveryPopup, setShowDeliveryPopup] = useState(false);
+  const [predefinedMessages, setPredefinedMessages] = useState<string[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(true);
+  const [errorMessages, setErrorMessages] = useState<string | null>(null);
+  const [sendingMessage, setSendingMessage] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    fetchPredefinedMessages();
+  }, []);
+
+  const fetchPredefinedMessages = async () => {
+    try {
+      setLoadingMessages(true);
+      setErrorMessages(null);
+      const messages = await getPredefinedMessages();
+      setPredefinedMessages(messages);
+    } catch (err) {
+      setErrorMessages('Failed to load quick messages');
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -66,19 +80,35 @@ export default function TravelerChatScreen() {
   };
 
   const handleReadyMessage = (message: string) => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        text: message,
-        sent: true,
-      },
-      {
-        id: Date.now().toString() + 1,
-        text: "I've made the payment",
-        sent: false,
-      },
-    ]);
+    const newMessage: ChatMessage = {
+      id: Date.now().toString(),
+      matchId: 'temp',
+      senderId: 'current',
+      messageType: 'TEXT',
+      messageContent: message,
+      fileUrl: null,
+      fileName: null,
+      fileSize: null,
+      isPredefined: true,
+      createdAt: new Date().toISOString(),
+      sender: { id: 'current', username: 'You' }
+    };
+
+    const responseMessage: ChatMessage = {
+      id: (Date.now() + 1).toString(),
+      matchId: 'temp',
+      senderId: 'other',
+      messageType: 'TEXT',
+      messageContent: "I've made the payment",
+      fileUrl: null,
+      fileName: null,
+      fileSize: null,
+      isPredefined: false,
+      createdAt: new Date().toISOString(),
+      sender: { id: 'other', username: 'Other User' }
+    };
+
+    setMessages((prev) => [...prev, newMessage, responseMessage]);
     setShowReadyMessage(false);
     setTimeout(() => {
       setChatUnlocked(true);
@@ -88,16 +118,41 @@ export default function TravelerChatScreen() {
 
   const handleSendMessage = () => {
     if (inputText.trim()) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          text: inputText.trim(),
-          sent: true,
-        },
-      ]);
+      const newMessage: ChatMessage = {
+        id: Date.now().toString(),
+        matchId: 'temp',
+        senderId: 'current',
+        messageType: 'TEXT',
+        messageContent: inputText.trim(),
+        fileUrl: null,
+        fileName: null,
+        fileSize: null,
+        isPredefined: false,
+        createdAt: new Date().toISOString(),
+        sender: { id: 'current', username: 'You' }
+      };
+      
+      setMessages((prev) => [...prev, newMessage]);
       setInputText('');
     }
+  };
+
+  const handleSendMedia = (media: { uri: string; type: 'IMAGE' | 'FILE' | 'VOICE_NOTE'; fileName: string; fileSize?: number }) => {
+    const newMessage: ChatMessage = {
+      id: Date.now().toString(),
+      matchId: 'temp',
+      senderId: 'current',
+      messageType: media.type,
+      messageContent: media.fileName,
+      fileUrl: media.uri,
+      fileName: media.fileName,
+      fileSize: media.fileSize || 0,
+      isPredefined: false,
+      createdAt: new Date().toISOString(),
+      sender: { id: 'current', username: 'You' }
+    };
+    
+    setMessages((prev) => [...prev, newMessage]);
   };
 
   const handleDeliveryConfirm = () => {
@@ -143,7 +198,18 @@ export default function TravelerChatScreen() {
           style={{ flex: 1, padding: 16, opacity: 0.7 }}
           imageStyle={{ borderRadius: 16 }}
         >
-          <ChatMessages messages={messages} />
+          {loadingMessages ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <LoadingSpinner size="large" />
+              <Text style={{ marginTop: 16, color: Colors.primary }}>Loading messages...</Text>
+            </View>
+          ) : errorMessages ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: 'red' }}>{errorMessages}</Text>
+            </View>
+          ) : (
+            <ChatMessages messages={messages} />
+          )}
         </ImageBackground>
 
         <View style={styles.footer}>
@@ -166,6 +232,8 @@ export default function TravelerChatScreen() {
               value={inputText}
               onChangeText={setInputText}
               onSend={handleSendMessage}
+              onSendMedia={handleSendMedia}
+              disabled={sendingMessage}
             />
           ) : null}
         </View>
@@ -174,25 +242,6 @@ export default function TravelerChatScreen() {
           visible={showDeliveryPopup}
           onClose={() => setShowDeliveryPopup(false)}
         />
-
-        {/* <View style={styles.footer}>
-          {showReadyMessage ? (
-            <TouchableOpacity
-              style={styles.readyButton}
-              onPress={handleReadyMessage}
-            >
-              <Text style={styles.readyButtonText} color="secondary">
-                I'm ready to accept
-              </Text>
-            </TouchableOpacity>
-          ) : chatUnlocked ? (
-            <ChatInput
-              value={inputText}
-              onChangeText={setInputText}
-              onSend={handleSendMessage}
-            />
-          ) : null}
-        </View> */}
 
         <DeliveryConfirmDrawer
           visible={showDeliveryConfirm}

@@ -10,8 +10,8 @@ import {
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
+import { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
 import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
 import Dropdown from '@/components/Dropdown';
@@ -22,9 +22,9 @@ import FlightIcon from '@/assets/svgs/FlightIcon';
 import MessageIcon from '@/assets/svgs/MessageIcon';
 import SendIcon from '@/assets/svgs/SendIcon';
 import React from 'react';
-import { getTrips } from '@/utils/api';
+import { getTrips, getMyShipments, initiateChat } from '@/utils/api';
 import { formatDate, formatTime } from '@/utils/dateUtils';
-import type { Trip } from '@/utils/api';
+import type { Trip, Shipment } from '@/utils/api';
 
 const airports = ['New York Airport', 'London Heathrow', 'Dubai International'];
 const radiusOptions = ['5 km', '10 km', '15 km', '20 km'];
@@ -63,6 +63,13 @@ export default function TravelersListScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const [showPackageDrawer, setShowPackageDrawer] = useState(false);
+  const [packageList, setPackageList] = useState<Shipment[]>([]);
+  const [packageLoading, setPackageLoading] = useState(false);
+  const [packageError, setPackageError] = useState<string | null>(null);
+  const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
+  const [initiateLoading, setInitiateLoading] = useState(false);
+  const [initiateError, setInitiateError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTrips();
@@ -82,6 +89,12 @@ export default function TravelersListScreen() {
     }
   };
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchTrips();
+    }, [])
+  );
+
   const handleBack = () => {
     if (router.canGoBack()) {
       router.back();
@@ -94,8 +107,45 @@ export default function TravelersListScreen() {
     setShowFilter(false);
   };
 
-  const handleChat = () => {
-    router.push('/chat');
+  const openPackageDrawer = async (tripId: string) => {
+    setShowPackageDrawer(true);
+    setSelectedTripId(tripId);
+    setPackageLoading(true);
+    setPackageError(null);
+    setPackageList([]);
+    try {
+      const pkgs = await getMyShipments();
+      setPackageList(pkgs);
+    } catch (err) {
+      setPackageError('Failed to fetch your packages');
+    } finally {
+      setPackageLoading(false);
+    }
+  };
+
+  const handleInitiateChat = async (shipmentId: string) => {
+    if (!selectedTripId) return;
+    setInitiateLoading(true);
+    setInitiateError(null);
+    try {
+      const result = await initiateChat(shipmentId, selectedTripId);
+      setShowPackageDrawer(false);
+      setSelectedTripId(null);
+      setInitiateLoading(false);
+      setInitiateError(null);
+      if (result && result.matchId) {
+        router.push({ pathname: '/chat', params: { matchId: result.matchId } });
+      } else {
+        router.push('/chat');
+      }
+    } catch (err: any) {
+      setInitiateError(err.message || 'Something went wrong');
+      setInitiateLoading(false);
+    }
+  };
+
+  const handleChat = (tripId: string) => {
+    openPackageDrawer(tripId);
   };
 
   const renderTravelerCard = (trip: Trip) => (
@@ -186,7 +236,7 @@ export default function TravelersListScreen() {
 
           <TouchableOpacity
             style={[styles.actionButton, trip.status !== 'ACCEPTING' && { borderColor: '#009C66' }]}
-            onPress={trip.status === 'ACCEPTING' ? handleChat : undefined}
+            onPress={trip.status === 'ACCEPTING' ? () => handleChat(trip.id) : undefined}
           >
             {trip.status === 'ACCEPTING' ? (
               <>
@@ -325,6 +375,66 @@ export default function TravelersListScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={showPackageDrawer}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setShowPackageDrawer(false)}
+        >
+          <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)' }}>
+            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, minHeight: 200 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12 }}>Select a Package</Text>
+              {packageLoading ? (
+                <ActivityIndicator size="large" color={Colors.primary} />
+              ) : packageError ? (
+                <Text style={{ color: 'red', textAlign: 'center' }}>{packageError}</Text>
+              ) : packageList.length === 0 ? (
+                <Text style={{ textAlign: 'center' }}>No packages found</Text>
+              ) : (
+                <ScrollView style={{ maxHeight: 320 }}>
+                  {packageList.map(pkg => (
+                    <TouchableOpacity
+                      key={pkg.id}
+                      style={{
+                        backgroundColor: '#F8F9FF',
+                        borderRadius: 12,
+                        padding: 12,
+                        marginBottom: 12,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 12,
+                        borderWidth: 1,
+                        borderColor: '#E7EAFF',
+                      }}
+                      onPress={() => handleInitiateChat(pkg.id)}
+                      disabled={initiateLoading}
+                    >
+                      <Image
+                        source={{ uri: pkg.packageImageUrl ? `http://194.164.150.61:3000${pkg.packageImageUrl}` : undefined }}
+                        style={{ width: 60, height: 60, borderRadius: 8, backgroundColor: '#eee' }}
+                        resizeMode="cover"
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#242A62', marginBottom: 2 }}>{pkg.packageType}</Text>
+                        <Text style={{ color: '#75758E', fontSize: 14 }}>To: {pkg.destinationCountry}</Text>
+                        <Text style={{ color: '#75758E', fontSize: 14 }}>Weight: {pkg.weightGrams}g</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+              {initiateError && <Text style={{ color: 'red', textAlign: 'center', marginTop: 8 }}>{initiateError}</Text>}
+              <TouchableOpacity
+                style={{ marginTop: 16, alignSelf: 'center' }}
+                onPress={() => setShowPackageDrawer(false)}
+                disabled={initiateLoading}
+              >
+                <Text style={{ color: Colors.primary, fontWeight: 'bold' }}>Cancel</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </Modal>

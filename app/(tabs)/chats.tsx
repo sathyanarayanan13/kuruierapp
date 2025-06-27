@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -12,7 +12,7 @@ import {
   FlatList,
   TextInput,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
 import Dropdown from '@/components/Dropdown';
@@ -29,111 +29,43 @@ import People from '@/assets/svgs/People';
 import TravelerSelectIcon from '@/assets/svgs/TravelerSelectIcon';
 import { Search } from 'lucide-react-native';
 import ChatListItem from '@/components/chat/ChatListItem';
+import { getChats, ChatListItem as ChatListItemType } from '@/utils/api';
+import { useUserRole } from '@/utils/UserContext';
 
 const airports = ['New York Airport', 'London Heathrow', 'Dubai International'];
 const radiusOptions = ['5 km', '10 km', '15 km', '20 km'];
 const { width, height } = Dimensions.get('window');
 
-// Dummy data for chat list
-const DUMMY_CHATS = [
-  {
-    id: '1',
-    type: 'direct',
-    name: 'Traveler 1',
-    avatar: require('@/assets/images/avatar1.png'), // Use require()
-    lastMessage: 'Hi 👋, Perfect will check it.',
-    time: '09:34 PM',
-    unreadCount: 0,
-  },
-  {
-    id: '2',
-    type: 'direct',
-    name: 'Traveler 2',
-    avatar: require('@/assets/images/avatar2.png'), // Use require()
-    lastMessage: 'Hi 👋, Perfect will check it.',
-    time: '09:34 PM',
-    unreadCount: 1,
-  },
-  {
-    id: '3',
-    type: 'group',
-    name: 'Group Chat 1',
-    avatars: [ // Use require()
-      require('@/assets/images/avatar1.png'),
-      require('@/assets/images/avatar2.png'),
-      require('@/assets/images/avatar3.png'),
-    ],
-    lastMessage: 'Hi 👋, Perfect will ...',
-    time: '09:34 PM',
-    unreadCount: 3,
-  },
-   {
-    id: '4',
-    type: 'direct',
-    name: 'Traveler 1',
-    avatar: require('@/assets/images/avatar1.png'), // Use require()
-    lastMessage: 'Hi 👋, Perfect will check it.',
-    time: '09:34 PM',
-    unreadCount: 0,
-  },
-  {
-    id: '5',
-    type: 'direct',
-    name: 'Traveler 2',
-    avatar: require('@/assets/images/avatar2.png'), // Use require()
-    lastMessage: 'Hi 👋, Perfect will check it.',
-    time: '09:34 PM',
-    unreadCount: 1,
-  },
-  {
-    id: '6',
-    type: 'group',
-    name: 'Group Chat 2',
-    avatars: [ // Use require()
-      require('@/assets/images/avatar1.png'),
-      require('@/assets/images/avatar2.png'),
-      require('@/assets/images/avatar3.png'),
-    ],
-    lastMessage: 'Hi 👋, Perfect will ...',
-    time: '09:34 PM',
-    unreadCount: 3,
-  },
-  {
-    id: '7',
-    type: 'direct',
-    name: 'Traveler 1',
-    avatar: require('@/assets/images/avatar1.png'), // Use require()
-    lastMessage: 'Hi 👋, Perfect will check it.',
-    time: '09:34 PM',
-    unreadCount: 0,
-  },
-  {
-    id: '8',
-    type: 'direct',
-    name: 'Traveler 2',
-    avatar: require('@/assets/images/avatar2.png'), // Use require()
-    lastMessage: 'Hi 👋, Perfect will check it.',
-    time: '09:34 PM',
-    unreadCount: 1,
-  },
-  {
-    id: '9',
-    type: 'group',
-    name: 'Group Chat 2',
-    avatars: [ // Use require()
-      require('@/assets/images/avatar1.png'),
-      require('@/assets/images/avatar2.png'),
-      require('@/assets/images/avatar3.png'),
-    ],
-    lastMessage: 'Hi 👋, Perfect will ...',
-    time: '09:34 PM',
-    unreadCount: 3,
-  },
-];
-
 export default function ChatTab() {
   const router = useRouter();
   const [searchText, setSearchText] = useState('');
+  const [chats, setChats] = useState<ChatListItemType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { userRole } = useUserRole();
+
+  useEffect(() => {
+    fetchChats();
+  }, []);
+
+  const fetchChats = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getChats();
+      setChats(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch chats');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchChats();
+    }, [])
+  );
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -147,21 +79,63 @@ export default function ChatTab() {
     router.push('/chat');
   };
 
-  // Filter chats based on search text (basic example)
-  const filteredChats = DUMMY_CHATS.filter(chat =>
-    chat.name.toLowerCase().includes(searchText.toLowerCase())
-  );
+  // Map backend roleInChat to app userRole
+  const mapRoleInChatToUserRole = (roleInChat: string) => {
+    if (roleInChat === 'SENDER') return 'TRAVELLER';
+    if (roleInChat === 'RECEIVER') return 'SHIPMENT_OWNER';
+    return roleInChat;
+  };
+
+  const filteredChats = chats
+    .filter(chat => {
+      // Only show chats where the mapped role matches the current user role
+      return mapRoleInChatToUserRole(chat.roleInChat) === userRole;
+    })
+    .filter(chat => {
+      // Filter by the other party's name
+      const otherUser = userRole === 'SHIPMENT_OWNER'
+        ? chat.match.trip.user
+        : chat.match.shipment.user;
+      return otherUser.username.toLowerCase().includes(searchText.toLowerCase());
+    });
 
   // Render chat item using the ChatListItem component
-  const renderChatItem = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-       onPress={() => { router.push('/chat') }}
-       activeOpacity={1}
-       style={{ flex: 1 }}
-    >
-      <ChatListItem chat={item} />
-    </TouchableOpacity>
-  );
+  const renderChatItem = ({ item }: { item: ChatListItemType }) => {
+    // Determine the other user and avatar
+    const otherUser = userRole === 'SHIPMENT_OWNER'
+      ? item.match.trip.user
+      : item.match.shipment.user;
+    // Use package image for shipment owner, or a default avatar for traveler
+    const avatar = userRole === 'SHIPMENT_OWNER'
+      ? require('@/assets/images/traveller.png')
+      : item.match.shipment.packageImageUrl
+        ? { uri: `http://194.164.150.61:3000${item.match.shipment.packageImageUrl}` }
+        : require('@/assets/images/avatar1.png');
+    // Get last message
+    const lastMsg = item.match.chats.length > 0 ? item.match.chats[item.match.chats.length - 1] : null;
+    const lastMessage = lastMsg ? lastMsg.messageContent : '';
+    const lastTime = lastMsg ? new Date(lastMsg.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+    const type: 'direct' = 'direct';
+    return (
+      <TouchableOpacity 
+         onPress={() => { router.push({ pathname: '/chat', params: { matchId: item.matchId } }) }}
+         activeOpacity={1}
+         style={{ flex: 1 }}
+      >
+        <ChatListItem
+          chat={{
+            id: item.id,
+            type,
+            name: otherUser.username,
+            avatar,
+            lastMessage,
+            time: lastTime,
+            unreadCount: 0, // You can update this if you have unread logic
+          }}
+        />
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -199,13 +173,27 @@ export default function ChatTab() {
         </View>
 
         <View style={styles.chatListWrapper}>
-          <FlatList
-            data={filteredChats}
-            keyExtractor={item => item.id}
-            renderItem={renderChatItem}
-            contentContainerStyle={styles.chatListContent}
-            showsVerticalScrollIndicator={false}
-          />
+          {loading ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 40 }}>
+              <Text>Loading chats...</Text>
+            </View>
+          ) : error ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 40 }}>
+              <Text style={{ color: 'red' }}>{error}</Text>
+            </View>
+          ) : filteredChats.length === 0 ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 40 }}>
+              <Text>No chats available</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredChats}
+              keyExtractor={item => item.id}
+              renderItem={renderChatItem}
+              contentContainerStyle={styles.chatListContent}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
         </View>
       </View>
     </SafeAreaView>

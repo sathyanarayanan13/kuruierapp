@@ -1,12 +1,15 @@
+import React from 'react';
 import {
   View,
   StyleSheet,
   Platform,
   TouchableOpacity,
   ImageBackground,
+  ScrollView,
+  RefreshControl,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useState, useEffect, useCallback } from 'react';
 import Colors from '@/constants/Colors';
 import ChatHeader from '@/components/chat/ChatHeader';
 import ChatMessages from '@/components/chat/ChatMessages';
@@ -20,30 +23,25 @@ import SuccessPopup from '@/components/SuccessPopup';
 import Text from '@/components/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BouncingDotsLoader from '@/components/chat/BouncingDotsLoader';
+import LoadingSpinner from '@/components/LoadingSpinner';
 import FlightRight from '@/assets/svgs/FlightRight';
 import NextIcon from '@/assets/svgs/NextIcon';
+import { 
+  getPredefinedMessages, 
+  createPaymentIntent, 
+  confirmPayment, 
+  getChatMessages,
+  sendMessage,
+  ChatMessage,
+  ChatAccess,
+  ChatMessagesResponse
+} from '@/utils/api';
+import { useStripe } from '@stripe/stripe-react-native';
 
-const predefinedMessages = [
-  'I have document',
-  'I have snacks',
-  'I have Clothes',
-  '<200g',
-  '<500g',
-  'I have Clothes',
-  '<200g',
-  '<500g',
-];
-
-const initialMessages = [
-  {
-    id: '1',
-    text: 'Hello 😊',
-    sent: true,
-  },
-];
+const PAYMENT_AMOUNT = 200; // INR
 
 export default function ChatScreen() {
-  const [messages, setMessages] = useState(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isPaid, setIsPaid] = useState(false);
   const [isGroupChat, setIsGroupChat] = useState(false);
@@ -54,7 +52,121 @@ export default function ChatScreen() {
   const [showDeliveryPopup, setShowDeliveryPopup] = useState(false);
   const [showDeliveryInfo, setShowDeliveryInfo] = useState(false);
   const [showMembersDrawer, setShowMembersDrawer] = useState(false);
+  const [predefinedMessages, setPredefinedMessages] = useState<string[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(true);
+  const [errorMessages, setErrorMessages] = useState<string | null>(null);
+  const [chatAccess, setChatAccess] = useState<ChatAccess | null>(null);
+  const [canSendFreeText, setCanSendFreeText] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const router = useRouter();
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+  const [paymentSheetLoading, setPaymentSheetLoading] = useState(false);
+  const [paymentSheetError, setPaymentSheetError] = useState<string | null>(null);
+  const [paymentIntentClientSecret, setPaymentIntentClientSecret] = useState<string | null>(null);
+  const { matchId } = useLocalSearchParams();
+
+  useEffect(() => {
+    if (matchId) {
+      initializeChat();
+    }
+  }, [matchId]);
+
+  // Set up periodic refresh for messages (every 10 seconds)
+  useEffect(() => {
+    if (!matchId || !isPaid) return;
+
+    const interval = setInterval(() => {
+      refreshMessages();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [matchId, isPaid]);
+
+  const initializeChat = async () => {
+    if (!matchId) return;
+    
+    try {
+      setInitialLoading(true);
+      setLoadingMessages(true);
+      setErrorMessages(null);
+      
+      // Fetch messages and chat access in one call
+      const chatData: ChatMessagesResponse = await getChatMessages(matchId as string);
+      
+      setMessages(chatData.messages);
+      setChatAccess(chatData.chatAccess);
+      setCanSendFreeText(chatData.canSendFreeText);
+      
+      // Check if chat is already paid/unlocked
+      setIsPaid(chatData.chatAccess.unlockedByPayment);
+      
+      // Fetch predefined messages in parallel
+      fetchPredefinedMessages();
+      
+    } catch (err: any) {
+      setErrorMessages(err.message || 'Failed to load chat');
+      console.error('Error fetching chat data:', err);
+    } finally {
+      setLoadingMessages(false);
+      setInitialLoading(false);
+    }
+  };
+
+  const fetchChatData = async () => {
+    if (!matchId) return;
+    
+    try {
+      setLoadingMessages(true);
+      setErrorMessages(null);
+      
+      // Fetch messages and chat access in one call
+      const chatData: ChatMessagesResponse = await getChatMessages(matchId as string);
+      
+      setMessages(chatData.messages);
+      setChatAccess(chatData.chatAccess);
+      setCanSendFreeText(chatData.canSendFreeText);
+      
+      // Check if chat is already paid/unlocked
+      setIsPaid(chatData.chatAccess.unlockedByPayment);
+      
+    } catch (err: any) {
+      setErrorMessages(err.message || 'Failed to load chat');
+      console.error('Error fetching chat data:', err);
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  const refreshMessages = async () => {
+    if (!matchId) return;
+    
+    try {
+      const chatData: ChatMessagesResponse = await getChatMessages(matchId as string);
+      setMessages(chatData.messages);
+      setChatAccess(chatData.chatAccess);
+      setCanSendFreeText(chatData.canSendFreeText);
+      setIsPaid(chatData.chatAccess.unlockedByPayment);
+    } catch (err: any) {
+      console.error('Error refreshing messages:', err);
+    }
+  };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchChatData();
+    setRefreshing(false);
+  }, [matchId]);
+
+  const fetchPredefinedMessages = async () => {
+    try {
+      const messages = await getPredefinedMessages();
+      setPredefinedMessages(messages);
+    } catch (err) {
+      console.error('Failed to load predefined messages:', err);
+    }
+  };
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -64,61 +176,117 @@ export default function ChatScreen() {
     }
   };
 
-  const handleSendMessage = () => {
-    if (inputText.trim()) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          text: inputText.trim(),
-          sent: true,
-        },
-      ]);
+  const handleSendMessage = async () => {
+    if (!inputText.trim() || !matchId || sendingMessage) return;
+    
+    setSendingMessage(true);
+    try {
+      const sentMessage = await sendMessage({
+        matchId: matchId as string,
+        messageContent: inputText.trim(),
+        messageType: 'TEXT',
+        isPredefined: false,
+      });
+      
+      // Add the sent message to the local state
+      setMessages(prev => [...prev, sentMessage]);
       setInputText('');
+    } catch (err: any) {
+      console.error('Failed to send message:', err);
+      // You could show an error toast here
+    } finally {
+      setSendingMessage(false);
     }
   };
 
-  const handlePredefinedMessage = (message: string) => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        text: message,
-        sent: true,
-      },
-    ]);
+  const handleSendMedia = async (media: { uri: string; type: 'IMAGE' | 'FILE' | 'VOICE_NOTE'; fileName: string; fileSize?: number }) => {
+    if (!matchId || sendingMessage) return;
+    
+    setSendingMessage(true);
+    try {
+      const sentMessage = await sendMessage({
+        matchId: matchId as string,
+        messageContent: media.fileName,
+        messageType: media.type,
+        isPredefined: false,
+        fileUri: media.uri,
+      });
+      
+      // Add the sent message to the local state
+      setMessages(prev => [...prev, sentMessage]);
+    } catch (err: any) {
+      console.error('Failed to send media:', err);
+      // You could show an error toast here
+    } finally {
+      setSendingMessage(false);
+    }
   };
 
-  const handlePayment = () => {
-    setShowPaymentSuccess(true);
+  const handlePredefinedMessage = async (message: string) => {
+    if (!matchId || sendingMessage) return;
+    
+    setSendingMessage(true);
+    try {
+      const sentMessage = await sendMessage({
+        matchId: matchId as string,
+        messageContent: message,
+        messageType: 'TEXT',
+        isPredefined: true,
+      });
+      
+      // Add the sent message to the local state
+      setMessages(prev => [...prev, sentMessage]);
+    } catch (err: any) {
+      console.error('Failed to send predefined message:', err);
+    } finally {
+      setSendingMessage(false);
+    }
   };
 
   const handlePaymentComplete = () => {
     setShowPaymentSuccess(false);
     setIsPaid(true);
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString() + '1',
-        text: 'I have snacks',
-        sent: true,
-      },
-      {
-        id: Date.now().toString() + '2',
-        text: 'Hi Shipment Owner 👋',
-        sent: false,
-      },
-      {
-        id: Date.now().toString() + '3',
-        text: 'I am Ready to accept',
-        sent: false,
-      },
-    ]);
+    // Refresh chat data to get updated access status
+    fetchChatData();
   };
 
   const handleViewShipmentStatus = () => {
     router.push('/shipment-status')
   }
+
+  const openPaymentSheet = async () => {
+    setPaymentSheetLoading(true);
+    setPaymentSheetError(null);
+    let result
+    try {
+      // 1. Create PaymentIntent via backend
+      if (!matchId) throw new Error('No matchId found for payment');
+      const clientSecret = await createPaymentIntent(matchId as string, PAYMENT_AMOUNT);
+      setPaymentIntentClientSecret(clientSecret);
+      // 2. Init PaymentSheet
+      const { error: initError } = await initPaymentSheet({
+        paymentIntentClientSecret: clientSecret,
+        merchantDisplayName: 'Kurierv2',
+        allowsDelayedPaymentMethods: false,
+      });
+      if (initError) throw initError;
+      // 3. Present PaymentSheet
+      result = await presentPaymentSheet();
+      if (result.error) throw result.error;
+      // 4. Confirm payment on backend
+      const data = await confirmPayment(clientSecret);
+      if (!(data && (data.success || data.message === 'Success'))) {
+        throw new Error(data?.message || 'Payment confirmation failed');
+      }
+    } catch (err: any) {
+      setPaymentSheetError(err.message || 'Payment failed. Please try again.');
+    } finally {
+      setPaymentSheetLoading(false);
+      if(!result?.error) {
+        setShowPaymentSuccess(true);
+      }
+    }
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -152,7 +320,19 @@ export default function ChatScreen() {
           style={{ flex: 1, padding: 16 }}
           imageStyle={{ borderRadius: 16 }}
         >
-          <ChatMessages messages={messages} />
+          {initialLoading ? (
+            <LoadingSpinner />
+          ) : loadingMessages ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <Text>Loading messages...</Text>
+            </View>
+          ) : errorMessages ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: 'red' }}>{errorMessages}</Text>
+            </View>
+          ) : (
+            <ChatMessages messages={messages} />
+          )}
         </ImageBackground>
 
         <View style={styles.footer}>
@@ -162,16 +342,21 @@ export default function ChatScreen() {
                 messages={predefinedMessages}
                 onMessageSelect={handlePredefinedMessage}
               />
+              {paymentSheetError &&
+                paymentSheetError !== 'Payment confirmed and chat unlocked successfully' && (
+                  <Text style={{ color: 'red', textAlign: 'center' }}>{paymentSheetError}</Text>
+                )}
               <TouchableOpacity
-                style={styles.paymentButton}
-                onPress={handlePayment}
+                style={[styles.paymentButton, paymentSheetLoading && { opacity: 0.5 }]}
+                onPress={openPaymentSheet}
+                disabled={paymentSheetLoading}
               >
                 <Text
                   style={styles.paymentButtonText}
                   color="secondary"
                   semiBold
                 >
-                  Go to Payment
+                  {paymentSheetLoading ? 'Processing...' : 'Go to Payment'}
                 </Text>
               </TouchableOpacity>
             </>
@@ -180,6 +365,8 @@ export default function ChatScreen() {
               value={inputText}
               onChangeText={setInputText}
               onSend={handleSendMessage}
+              onSendMedia={handleSendMedia}
+              disabled={sendingMessage}
             />
           )}
         </View>

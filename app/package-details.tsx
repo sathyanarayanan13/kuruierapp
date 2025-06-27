@@ -154,30 +154,30 @@ export default function PackageDetailsScreen() {
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>
-                Estimated Delivery Date <Text style={styles.required}>*</Text>
+              Estimated Delivery Date <Text style={styles.required}>*</Text>
               </Text>
               <TouchableOpacity
-                style={styles.dateInput}
-                onPress={() => setShowDatePicker(true)}
+              style={styles.dateInput}
+              onPress={() => setShowDatePicker(true)}
               >
-                <Text style={styles.dateText}>
-                  {deliveryDate.toLocaleDateString()}
-                </Text>
-                <DatePicker
-                  width={15}
-                  height={15}
-                  color="#5059A5"
-                  style={{ marginLeft: 20 }}
-                />
+              <Text style={styles.dateText}>
+                {deliveryDate.toLocaleDateString()}
+              </Text>
+              <DatePicker
+                width={15}
+                height={15}
+                color="#5059A5"
+                style={{ marginLeft: 20 }}
+              />
               </TouchableOpacity>
               {showDatePicker && (
-                <DateTimePicker
-                  value={deliveryDate}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={handleDateChange}
-                  minimumDate={new Date()}
-                />
+              <DateTimePicker
+                value={deliveryDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={handleDateChange}
+                minimumDate={new Date()}
+              />
               )}
             </View>
 
