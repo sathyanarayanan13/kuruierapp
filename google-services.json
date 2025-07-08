@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "644129051957",
+    "project_id": "kururier",
+    "storage_bucket": "kururier.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:644129051957:android:1d9b4c59013eeffc84e87c",
+        "android_client_info": {
+          "package_name": "com.sathya131626.kuruier"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUuGcZnCGVJwRTWAEAYLcAGqaVb_ENZNM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

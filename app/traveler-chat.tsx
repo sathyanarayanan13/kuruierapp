@@ -117,9 +117,12 @@ export default function TravelerChatScreen() {
   };
 
   const setupWebSocketListeners = () => {
-    // New message received
+    WebSocketService.removeAllListeners();
     WebSocketService.on('new_message', (message: ChatMessage) => {
-      setMessages(prev => [...prev, message]);
+      setMessages(prev => {
+        if (prev.some(m => m.id === message.id)) return prev;
+        return [...prev, message];
+      });
       
       // Show notification if app is in background
       if (AppState.currentState !== 'active') {
@@ -255,24 +258,15 @@ export default function TravelerChatScreen() {
 
   const handleSendMessage = () => {
     if (inputText.trim()) {
-      const newMessage: ChatMessage = {
-        id: Date.now().toString(),
-        matchId: 'temp',
-        senderId: 'current',
-        messageType: 'TEXT',
-        messageContent: inputText.trim(),
-        fileUrl: null,
-        fileName: null,
-        fileSize: null,
-        isPredefined: false,
-        createdAt: new Date().toISOString(),
-        sender: { id: 'current', username: 'You' }
-      };
-      
-      setMessages((prev) => [...prev, newMessage]);
+      sendMessageToBackend(inputText.trim());
       setInputText('');
       stopTyping();
     }
+  };
+
+  const sendMessageToBackend = (content: string) => {
+    // Implement the actual sendMessage API call here, similar to main chat
+    // This is a placeholder for parity with the main chat
   };
 
   const handleSendMedia = (media: { uri: string; type: 'IMAGE' | 'FILE' | 'VOICE_NOTE'; fileName: string; fileSize?: number }) => {

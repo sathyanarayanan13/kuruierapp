@@ -157,9 +157,12 @@ export default function ChatScreen() {
   };
 
   const setupWebSocketListeners = () => {
-    // New message received
+    WebSocketService.removeAllListeners();
     WebSocketService.on('new_message', (message: ChatMessage) => {
-      setMessages(prev => [...prev, message]);
+      setMessages(prev => {
+        if (prev.some(m => m.id === message.id)) return prev;
+        return [...prev, message];
+      });
       
       // Show notification if app is in background
       if (AppState.currentState !== 'active') {
@@ -328,24 +331,18 @@ export default function ChatScreen() {
 
   const handleSendMessage = async () => {
     if (!inputText.trim() || !matchId || sendingMessage) return;
-    
     setSendingMessage(true);
     stopTyping();
-    
     try {
-      const sentMessage = await sendMessage({
+      await sendMessage({
         matchId: matchId as string,
         messageContent: inputText.trim(),
         messageType: 'TEXT',
         isPredefined: false,
       });
-      
-      // Add the sent message to the local state
-      setMessages(prev => [...prev, sentMessage]);
       setInputText('');
     } catch (err: any) {
       console.error('Failed to send message:', err);
-      // You could show an error toast here
     } finally {
       setSendingMessage(false);
     }
@@ -353,24 +350,18 @@ export default function ChatScreen() {
 
   const handleSendMedia = async (media: { uri: string; type: 'IMAGE' | 'FILE' | 'VOICE_NOTE'; fileName: string; fileSize?: number }) => {
     if (!matchId || sendingMessage) return;
-    
     setSendingMessage(true);
     stopTyping();
-    
     try {
-      const sentMessage = await sendMessage({
+      await sendMessage({
         matchId: matchId as string,
         messageContent: media.fileName,
         messageType: media.type,
         isPredefined: false,
         fileUri: media.uri,
       });
-      
-      // Add the sent message to the local state
-      setMessages(prev => [...prev, sentMessage]);
     } catch (err: any) {
       console.error('Failed to send media:', err);
-      // You could show an error toast here
     } finally {
       setSendingMessage(false);
     }

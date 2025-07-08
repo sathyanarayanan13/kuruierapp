@@ -47,7 +47,8 @@
         }
       ],
       [
-        "expo-build-properties", {
+        "expo-build-properties",
+        {
           "android": {
             "usesCleartextTraffic": true
           }
@@ -59,15 +60,25 @@
     },
     "android": {
       "package": "com.sathya131626.kuruier",
-      "version": "1.0.4",
-      "versionCode": 4,
+      "version": "1.0.5",
+      "versionCode": 5,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE"
-      ]
-    }
+      ],
+      "googleServicesFile": "./google-services.json"
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "b18b0d3e-bab4-479c-833a-697897e02665"
+      }
+    },
+    "owner": "sathya131626"
   }
 }
