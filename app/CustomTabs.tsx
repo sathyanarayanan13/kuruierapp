@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, ActivityIndicator } from 'react-native';
 import CustomTabBar from '@/components/CustomTabBar';
@@ -17,6 +17,24 @@ const Tab = createBottomTabNavigator();
 export default function CustomTabs() {
   const { userRole, isLoading } = useUserRole();
   const isTraveller = userRole === 'TRAVELLER';
+
+  // Get navigation object from Tab.Navigator
+  const navigationRef = React.useRef<any>(null);
+
+  useEffect(() => {
+    if (navigationRef.current) {
+      // Get the current route name
+      const currentRoute = navigationRef.current.getCurrentRoute?.()?.name;
+      // Tabs for the current role
+      const validTabs = isTraveller
+        ? ['couriers', 'travels', 'chats', 'profile']
+        : ['travelers', 'packages', 'chats', 'profile'];
+      // If current route is not in valid tabs or is 'profile', focus 'profile'
+      if (!validTabs.includes(currentRoute) || currentRoute === 'profile') {
+        navigationRef.current.navigate('profile');
+      }
+    }
+  }, [userRole]);
 
   // Show loading spinner while role is being determined
   if (isLoading) {

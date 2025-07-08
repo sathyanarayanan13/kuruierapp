@@ -1,5 +1,5 @@
 import Package from '@/assets/svgs/Package';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
@@ -64,6 +64,15 @@ const CustomTabBar: React.FC<CustomTabBarProps> = ({
       route: 'profile'
     },
   ];
+
+  // Ensure correct tab is focused after role change
+  useEffect(() => {
+    const validRoutes = tabConfig.map(tab => tab.route);
+    const currentRoute = state.routes[state.index]?.name;
+    if (!validRoutes.includes(currentRoute) || currentRoute === 'profile') {
+      navigation.navigate('profile');
+    }
+  }, [showOwnerTabs, state.routes.length]);
 
   return (
     <View style={[styles.tabBar, { paddingBottom: insets.bottom }]}> 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput, Platform, Image, ImageBackground, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, TextInput, Platform, Image, ImageBackground, Alert, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Text from '@/components/Text';
@@ -29,6 +29,20 @@ export default function EditProfileScreen() {
   const [mail, setMail] = useState(initialData?.email || '');
   const [selectedRole, setSelectedRole] = useState(initialData?.currentRole || 'SHIPMENT_OWNER');
   const [loading, setLoading] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   const handleUpdateDetails = async () => {
     try {
@@ -98,7 +112,7 @@ export default function EditProfileScreen() {
 
           {/* Name Input */}
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Name <Text style={{ color: 'red' }}>*</Text></Text>
+            <Text style={styles.inputLabel}>Name <Text style={styles.required}>*</Text></Text>
             <View style={styles.inputField}>
               <TextInput
                 style={styles.textInput}
@@ -114,7 +128,7 @@ export default function EditProfileScreen() {
 
           {/* Mobile Input */}
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Mobile <Text style={{ color: 'red' }}>*</Text></Text>
+            <Text style={styles.inputLabel}>Mobile <Text style={styles.required}>*</Text></Text>
             <View style={styles.inputField}>
               <TextInput
                 style={styles.textInput}
@@ -124,6 +138,7 @@ export default function EditProfileScreen() {
                 onChangeText={setMobile}
                 keyboardType="phone-pad"
                 maxLength={10}
+                editable={false}
               />
               {/* Phone Icon */}
               <Phone width={20} color={Colors.text} opacity={0.6} />
@@ -132,7 +147,7 @@ export default function EditProfileScreen() {
 
           {/* Mail Input */}
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Mail <Text style={{ color: 'red' }}>*</Text></Text>
+            <Text style={styles.inputLabel}>Mail <Text style={styles.required}>*</Text></Text>
             <View style={styles.inputField}>
               <TextInput
                 style={styles.textInput}
@@ -160,10 +175,7 @@ export default function EditProfileScreen() {
               <Image source={TravelerIllustration} style={styles.roleIllustration} resizeMode="contain" />
               <Text style={styles.roleCardText}>Traveller</Text>
               {selectedRole === 'TRAVELLER' && (
-                <View style={styles.checkmarkContainer}>
-                  {/* Placeholder Checkmark Icon */}
-                  <Check size={12} color={Colors.secondary} />
-                </View>
+                <View style={styles.checkmarkContainer}><Check size={12} color={Colors.secondary} /></View>
               )}
             </TouchableOpacity>
 
@@ -174,11 +186,8 @@ export default function EditProfileScreen() {
             >
               <Image source={ShipmentOwnerIllustration} style={styles.roleIllustration} resizeMode="contain" />
               <Text style={styles.roleCardText}>Shipment Owner</Text>
-               {selectedRole === 'SHIPMENT_OWNER' && (
-                <View style={styles.checkmarkContainer}>
-                   {/* Placeholder Checkmark Icon */}
-                  <Check size={12} color={Colors.secondary} />
-                </View>
+              {selectedRole === 'SHIPMENT_OWNER' && (
+                <View style={styles.checkmarkContainer}><Check size={12} color={Colors.secondary} /></View>
               )}
             </TouchableOpacity>
           </View>
@@ -186,15 +195,17 @@ export default function EditProfileScreen() {
         </View>
 
         {/* Update Details Button */}
-        <TouchableOpacity 
-          style={[styles.updateButton, loading && styles.updateButtonDisabled]} 
-          onPress={handleUpdateDetails}
-          disabled={loading}
-        >
-          <Text style={styles.updateButtonText} color="secondary" semiBold>
-            {loading ? 'Updating...' : 'Update Details'}
-          </Text>
-        </TouchableOpacity>
+        {!keyboardVisible && (
+          <TouchableOpacity 
+            style={[styles.updateButton, loading && styles.updateButtonDisabled]} 
+            onPress={handleUpdateDetails}
+            disabled={loading}
+          >
+            <Text style={styles.updateButtonText} color="secondary" semiBold>
+              {loading ? 'Updating...' : 'Update Details'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -248,7 +259,6 @@ const styles = StyleSheet.create({
     gap: 15
   },
   form: {
-    flex: 1,
     gap: 15,
     backgroundColor: Colors.secondary,
     marginTop: -100,
@@ -357,5 +367,8 @@ const styles = StyleSheet.create({
   updateButtonText: {
     fontSize: 18,
     fontFamily: 'OpenSans_600SemiBold'
+  },
+  required: {
+    color: 'red',
   },
 }); 

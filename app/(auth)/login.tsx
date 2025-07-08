@@ -23,6 +23,7 @@ import Eye from '@/assets/svgs/EyeIcon';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { login, isAuthenticated, getStoredUser } from '@/utils/api';
 import { validateMobileNumber, validatePassword } from '@/utils/validation';
+import { useUserRole } from '@/utils/UserContext';
 
 export default function LoginScreen() {
   const [mobile, setMobile] = useState('');
@@ -35,6 +36,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const preventBack = params.preventBack === 'true';
+  const { setUserRole } = useUserRole();
 
   useEffect(() => {
     checkAuthStatus();
@@ -109,12 +111,8 @@ export default function LoginScreen() {
 
       setLoading(true);
       const response = await login(mobile, password);
-      
-      if (response.user.currentRole === 'SHIPMENT_OWNER') {
-        router.replace('/travelers-list');
-      } else {
-        router.replace('/courier-list');
-      }
+      setUserRole(response.user.currentRole);
+      router.replace('/(tabs)');
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to login. Please try again.');
     } finally {
