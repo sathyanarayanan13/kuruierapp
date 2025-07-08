@@ -299,7 +299,6 @@ const styles = StyleSheet.create({
     fontFamily: 'OpenSans_400Regular',
   },
   formContainer: {
-    flex: 1,
     gap: 15,
     backgroundColor: Colors.secondary,
     marginTop: -100,
