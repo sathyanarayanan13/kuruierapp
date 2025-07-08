@@ -13,7 +13,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
 import BackButton from '@/assets/svgs/BackButton';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import DatePicker from '@/assets/svgs/DatePicker';
 import FlightRight from '@/assets/svgs/FlightRight';
 import AddIcon from '@/assets/svgs/AddIcon';
@@ -40,7 +40,6 @@ export default function TravelDetailsTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const insets = useSafeAreaInsets();
 
   const fetchTrips = async () => {
     try {
@@ -158,9 +157,6 @@ export default function TravelDetailsTab() {
               tintColor={Colors.primary}
             />
           }
-          contentContainerStyle={{
-            paddingBottom: insets.bottom + 80,
-          }}
         >
           {loading ? (
             <View style={styles.loadingContainer}>
