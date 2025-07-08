@@ -518,7 +518,7 @@ export default function ChatScreen() {
                   color="secondary"
                   semiBold
                 >
-                  {paymentSheetLoading ? 'Processing...' : 'Go to Payment'}
+                  {paymentSheetLoading ? 'Processing...' : 'Pay & Unlock Traveller'}
                 </Text>
               </TouchableOpacity>
             </>

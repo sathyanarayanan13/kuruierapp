@@ -291,7 +291,6 @@ export default function ChatTab() {
               renderItem={renderChatItem}
               contentContainerStyle={{
                 paddingBottom: insets.bottom + 80,
-                paddingHorizontal: 16,
               }}
               showsVerticalScrollIndicator={false}
             />
