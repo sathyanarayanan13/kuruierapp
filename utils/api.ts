@@ -387,6 +387,12 @@ export async function getTrips(): Promise<Trip[]> {
   return response.data!;
 }
 
+export async function getMyTrips(): Promise<Trip[]> {
+  const response = await apiCall<Trip[]>('/trips/v1/my-trips', 'GET');
+  return response.data!;
+}
+
+
 export async function createTrip(data: CreateTripRequest): Promise<CreateTripResponse> {
   const response = await apiCall<CreateTripResponse>('/trips/v1', 'POST', data);
   return response.data!;
