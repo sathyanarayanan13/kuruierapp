@@ -18,7 +18,7 @@ import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
 import Dropdown from '@/components/Dropdown';
 import BackButton from '@/assets/svgs/BackButton';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import FilterIcon from '@/assets/svgs/FilterIcon';
 import FlightIcon from '@/assets/svgs/FlightIcon';
 import MessageIcon from '@/assets/svgs/MessageIcon';
@@ -51,6 +51,7 @@ export default function ChatTab() {
   const [isConnected, setIsConnected] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const appState = useRef(AppState.currentState);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     fetchChats();
@@ -262,7 +263,7 @@ export default function ChatTab() {
             <Search size={20} color='#586377' opacity={0.6}/>
             <TextInput
               style={styles.searchInput}
-              placeholder="Search message..."
+              placeholder="Search your messages"
               placeholderTextColor='#586377'
               value={searchText}
               onChangeText={setSearchText}
@@ -288,7 +289,10 @@ export default function ChatTab() {
               data={filteredChats}
               keyExtractor={item => item.id}
               renderItem={renderChatItem}
-              contentContainerStyle={styles.chatListContent}
+              contentContainerStyle={{
+                paddingBottom: insets.bottom + 80,
+                paddingHorizontal: 16,
+              }}
               showsVerticalScrollIndicator={false}
             />
           )}

@@ -30,12 +30,14 @@ import { useState, useEffect } from 'react';
 import { getShipments } from '@/utils/api';
 import type { Shipment } from '@/utils/api';
 import { formatDate } from '@/utils/dateUtils';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function CourierListScreen() {
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     fetchShipments();
@@ -102,7 +104,11 @@ export default function CourierListScreen() {
     return (
       <ScrollView
         style={styles.content}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={{
+          paddingBottom: insets.bottom + 80,
+          padding: 16,
+          paddingTop: 0,
+        }}
         showsVerticalScrollIndicator={false}
       >
         {shipments.map((shipment) => (

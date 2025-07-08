@@ -25,6 +25,7 @@ import NextIcon from '@/assets/svgs/NextIcon';
 import { getPredefinedMessages, ChatMessage, getStoredUser } from '@/utils/api';
 import WebSocketService from '@/utils/WebSocketService';
 import NotificationService from '@/utils/NotificationService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const initialMessages: ChatMessage[] = [
   {
@@ -67,6 +68,7 @@ export default function TravelerChatScreen() {
   const router = useRouter();
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const appState = useRef(AppState.currentState);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     initializeChat();
@@ -360,7 +362,7 @@ export default function TravelerChatScreen() {
         <View style={styles.footer}>
           {showReadyMessage ? (
             <View style={styles.predefinedContainer}>
-              <ScrollView contentContainerStyle={styles.predefinedContent}>
+              <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 80, ...styles.predefinedContent }}>
                 {predefinedMessages.map((message, index) => (
                   <TouchableOpacity
                     key={index}

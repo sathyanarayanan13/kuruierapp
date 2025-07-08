@@ -17,7 +17,7 @@ import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
 import Dropdown from '@/components/Dropdown';
 import BackButton from '@/assets/svgs/BackButton';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import FilterIcon from '@/assets/svgs/FilterIcon';
 import FlightIcon from '@/assets/svgs/FlightIcon';
 import MessageIcon from '@/assets/svgs/MessageIcon';
@@ -122,6 +122,7 @@ export default function PackageDetailsTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
 
   const fetchShipments = async () => {
     try {
@@ -236,6 +237,9 @@ export default function PackageDetailsTab() {
 
         <ScrollView 
           style={styles.content}
+          contentContainerStyle={{
+            paddingBottom: insets.bottom + 80,
+          }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

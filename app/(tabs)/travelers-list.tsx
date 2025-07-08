@@ -16,7 +16,7 @@ import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
 import Dropdown from '@/components/Dropdown';
 import BackButton from '@/assets/svgs/BackButton';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import FilterIcon from '@/assets/svgs/FilterIcon';
 import FlightIcon from '@/assets/svgs/FlightIcon';
 import MessageIcon from '@/assets/svgs/MessageIcon';
@@ -70,6 +70,7 @@ export default function TravelersListScreen() {
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [initiateLoading, setInitiateLoading] = useState(false);
   const [initiateError, setInitiateError] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     fetchTrips();
@@ -284,7 +285,11 @@ export default function TravelersListScreen() {
     return (
       <ScrollView
         style={styles.content}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={{
+          paddingBottom: insets.bottom + 80,
+          padding: 8,
+          paddingTop: 0,
+        }}
         showsVerticalScrollIndicator={false}
       >
         {trips.map(renderTravelerCard)}
