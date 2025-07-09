@@ -6,15 +6,30 @@ import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { useFonts } from '@/hooks/useFonts';
 import SplashScreen from '@/components/SplashScreen';
 import { UserProvider } from '@/utils/UserContext';
+import { LocationProvider } from '@/utils/LocationContext';
 import { StripeProvider } from '@stripe/stripe-react-native';
 import WebSocketService from '@/utils/WebSocketService';
 import NotificationService from '@/utils/NotificationService';
 import { isAuthenticated } from '@/utils/api';
+import { useAppPermissions } from '@/hooks/useAppPermissions';
+import { View, Text, Button, Alert } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 export default function RootLayout() {
   useFrameworkReady();
   const { fontsLoaded, fontError } = useFonts();
   const [showSplash, setShowSplash] = useState(true);
+
+  // Permissions
+  const {
+    isLoading: permissionsLoading,
+    mandatoryPermissionsDenied,
+    requestAllPermissions,
+  } = useAppPermissions();
+
+  useEffect(() => {
+    requestAllPermissions();
+  }, []);
 
   useEffect(() => {
     const initializeServices = async () => {
@@ -61,30 +76,55 @@ export default function RootLayout() {
     return <SplashScreen onAnimationComplete={() => {}} />;
   }
 
+  if (permissionsLoading) {
+    return <SplashScreen onAnimationComplete={() => {}} />;
+  }
+
+  if (mandatoryPermissionsDenied.includes('location')) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#162BEB' }}>
+        <Text style={{ color: 'white', fontSize: 20, marginBottom: 20, textAlign: 'center' }}>
+          Location permission is required to use this app.\n\nPlease enable location access in your device settings.
+        </Text>
+        <Button
+          title="Try Again"
+          onPress={() => requestAllPermissions()}
+          color="#fff"
+        />
+      </View>
+    );
+  }
+
   return (
-    <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISH_KEY!}>
-      <UserProvider>
-        {showSplash ? (
-          <SplashScreen onAnimationComplete={() => setShowSplash(false)} />
-        ) : (
-          <>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="chat" />
-              <Stack.Screen name="EditProfileScreen" />
-              <Stack.Screen name="courier-list" />
-              <Stack.Screen name="package-details" />
-              <Stack.Screen name="travel-details" />
-              <Stack.Screen name="traveler-details" />
-              <Stack.Screen name="traveler-chat" />
-              <Stack.Screen name="shipment-status" />
-              <Stack.Screen name="package-delivery" />
-            </Stack>
-            <StatusBar style="light" />
-          </>
-        )}
-      </UserProvider>
-    </StripeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISH_KEY!}>
+        <UserProvider>
+          <LocationProvider>
+            {showSplash ? (
+              <SplashScreen onAnimationComplete={() => setShowSplash(false)} />
+            ) : (
+              <>
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="(auth)" />
+                  <Stack.Screen name="(tabs)" />
+                  <Stack.Screen name="chat" />
+                  <Stack.Screen name="EditProfileScreen" />
+                  <Stack.Screen name="courier-list" />
+                  <Stack.Screen name="package-details" />
+                  <Stack.Screen name="travel-details" />
+                  <Stack.Screen name="traveler-details" />
+                  <Stack.Screen name="traveler-chat" />
+                  <Stack.Screen name="shipment-status" />
+                  <Stack.Screen name="package-delivery" />
+                  <Stack.Screen name="location-map" />
+                  <Stack.Screen name="location-search" />
+                </Stack>
+                <StatusBar style="light" />
+              </>
+            )}
+          </LocationProvider>
+        </UserProvider>
+      </StripeProvider>
+    </GestureHandlerRootView>
   );
 }

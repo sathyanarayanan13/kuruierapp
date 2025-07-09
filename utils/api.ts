@@ -350,9 +350,11 @@ export async function updateProfile(
   });
 }
 
-export async function getShipments(): Promise<Shipment[]> {
-  const response = await apiCall<Shipment[]>('/shipments/v1', 'GET');
-  return response.data!;
+export async function getShipments(destinationCountry?: string): Promise<Shipment[]> {
+  const queryParams = destinationCountry ? `?destinationCountry=${encodeURIComponent(destinationCountry)}` : '';
+  const res = await apiCall<Shipment[]>(`/shipments/v1${queryParams}`, 'GET');
+  if (!res.success) throw new Error(res.message || 'Failed to fetch shipments');
+  return res.data!;
 }
 
 export async function getMyShipments(): Promise<Shipment[]> {
@@ -382,9 +384,11 @@ export async function createShipment(data: CreateShipmentRequest): Promise<Shipm
   return response.data!;
 }
 
-export async function getTrips(): Promise<Trip[]> {
-  const response = await apiCall<Trip[]>('/trips/v1', 'GET');
-  return response.data!;
+export async function getTrips(destinationCountry?: string): Promise<Trip[]> {
+  const queryParams = destinationCountry ? `?destinationCountry=${encodeURIComponent(destinationCountry)}` : '';
+  const res = await apiCall<Trip[]>(`/trips/v1${queryParams}`, 'GET');
+  if (!res.success) throw new Error(res.message || 'Failed to fetch trips');
+  return res.data!;
 }
 
 export async function getMyTrips(): Promise<Trip[]> {
@@ -621,4 +625,13 @@ export async function getChatDetails(matchId: string): Promise<ChatMatch> {
   const response = await apiCall<ChatMatch>(`/chat/v1/chats/${matchId}`, 'GET');
   if (!response.success || !response.data) throw new Error(response.message || 'Failed to fetch chat details');
   return response.data;
+}
+
+export async function getValidCounts(): Promise<{ validPackageCount: number; validTravelCount: number }> {
+  const res = await apiCall<{ validPackageCount: number; validTravelCount: number }>(
+    '/users/v1/valid-counts',
+    'GET'
+  );
+  if (!res.success) throw new Error(res.message || 'Failed to fetch valid counts');
+  return res.data!;
 }

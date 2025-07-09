@@ -27,33 +27,73 @@ import DatePicker from '@/assets/svgs/DatePicker';
 import MessageIcon from '@/assets/svgs/MessageIcon';
 import SendIcon from '@/assets/svgs/SendIcon';
 import { useState, useEffect } from 'react';
-import { getShipments } from '@/utils/api';
+import { getShipments, getValidCounts, getTrips, Trip } from '@/utils/api';
 import type { Shipment } from '@/utils/api';
 import { formatDate } from '@/utils/dateUtils';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Dropdown from '@/components/Dropdown';
 
 export default function CourierListScreen() {
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [validTravelCount, setValidTravelCount] = useState<number | null>(null);
+  const [validCountLoading, setValidCountLoading] = useState(true);
+  const [validCountError, setValidCountError] = useState<string | null>(null);
+  const [trips, setTrips] = useState<Trip[]>([]); // State for trips
+  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null); // State for selected trip
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    fetchShipments();
+    fetchValidCounts();
+    fetchTrips(); // Fetch trips when component mounts
   }, []);
 
-  const fetchShipments = async () => {
+  useEffect(() => {
+    if (selectedTrip) {
+      fetchShipments(selectedTrip.toCountry);
+    }
+  }, [selectedTrip]);
+
+  const fetchShipments = async (destinationCountry?: string) => {
     try {
       setLoading(true);
       setError(null);
-      const data = await getShipments();
+      const data = await getShipments(destinationCountry);
       setShipments(data);
     } catch (err) {
       setError('Failed to fetch courier list');
       console.error('Error fetching shipments:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchValidCounts = async () => {
+    try {
+      setValidCountLoading(true);
+      setValidCountError(null);
+      const { validTravelCount } = await getValidCounts();
+      setValidTravelCount(validTravelCount);
+    } catch (err) {
+      setValidCountError('Failed to check travel status');
+    } finally {
+      setValidCountLoading(false);
+    }
+  };
+
+  const fetchTrips = async () => {
+    try {
+      const data = await getTrips();
+      const validTrips = data.filter(trip => new Date(trip.departureDate) >= new Date());
+      setTrips(validTrips);
+      if (validTrips.length > 0) {
+        const sortedTrips = validTrips.sort((a, b) => new Date(a.departureDate).getTime() - new Date(b.departureDate).getTime());
+        setSelectedTrip(sortedTrips[0]);
+      }
+    } catch (err) {
+      console.error('Error fetching trips:', err);
     }
   };
 
@@ -77,6 +117,34 @@ export default function CourierListScreen() {
   };
 
   const renderContent = () => {
+    if (validCountLoading) {
+      return (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      );
+    }
+    if (validCountError) {
+      return (
+        <View style={styles.centerContainer}>
+          <Text style={styles.errorText}>{validCountError}</Text>
+        </View>
+      );
+    }
+    if (validTravelCount === 0) {
+      return (
+        <View style={styles.centerContainer}>
+          <Text style={styles.noDataText}>Please enter your travel details</Text>
+          <TouchableOpacity
+            style={[styles.chatButton, { marginTop: 16 }]}
+            onPress={() => router.push('/(tabs)/shipments')}
+          >
+            <Text style={styles.chatButtonText}>Go to Travel List Form</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     if (loading) {
       return (
         <View style={styles.centerContainer}>
@@ -96,7 +164,7 @@ export default function CourierListScreen() {
     if (shipments.length === 0) {
       return (
         <View style={styles.centerContainer}>
-          <Text style={styles.noDataText}>No courier's list found</Text>
+          <Text style={styles.noDataText}>No courier's list found for this destination</Text>
         </View>
       );
     }
@@ -178,11 +246,28 @@ export default function CourierListScreen() {
                 <Text style={styles.title} color="secondary" semiBold>
                   Courier's List
                 </Text>
+                
               </View>
               <TouchableOpacity style={styles.filterButton}>
                 <FilterIcon width={32} height={32} color="#5059A5" />
               </TouchableOpacity>
             </View>
+            {/* Travel Selection Dropdown inside header, after the title */}
+            {trips && trips.length > 0 && (
+              <View style={styles.packageDropdownContainer}>
+                <Dropdown
+                  value={selectedTrip ? `${selectedTrip.pnrNumber} - ${selectedTrip.toCountry}` : ''}
+                  items={trips.map(trip => `${trip.pnrNumber} - ${trip.toCountry}`)}
+                  onChange={(selectedLabel) => {
+                    const trip_ = trips.find(trip => `${trip.pnrNumber} - ${trip.toCountry}` === selectedLabel);
+                    if (trip_) {
+                      setSelectedTrip(trip_);
+                    }
+                  }}
+                  placeholder="Choose a travel"
+                />
+              </View>
+            )}
           </ImageBackground>
         </View>
         {renderContent()}
@@ -252,7 +337,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    marginTop: -70,
+    marginTop: -20,
   },
   scrollContent: {
     padding: 16,
@@ -312,7 +397,8 @@ const styles = StyleSheet.create({
   chatButtonText: {
     fontSize: 14,
     color: Colors.mainTheme,
-    fontFamily: 'OpenSans_600SemiBold'
+    fontFamily: 'OpenSans_600SemiBold',
+    paddingHorizontal: 10,
   },
   sentStatus: {
     flexDirection: 'row',
@@ -343,5 +429,12 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontSize: 16,
     fontFamily: 'OpenSans_500Medium',
+  },
+  packageDropdownContainer: {
+    backgroundColor: 'transparent',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 10,
   },
 });

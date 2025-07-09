@@ -10,16 +10,19 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, MapPin, Search } from 'lucide-react-native';
 import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
 import Dropdown from '@/components/Dropdown';
 import DatePicker from '@/assets/svgs/DatePicker';
 import { createTrip } from '@/utils/api';
 import { useLocation } from '@/hooks/useLocation';
+import { useLocationContext } from '@/utils/LocationContext';
+import { usePackageLocation } from '@/hooks/usePackageLocation';
+import RBSheet from 'react-native-raw-bottom-sheet';
 
 const countries = ['UAE', 'USA', 'UK', 'India', 'Singapore'];
 
@@ -32,8 +35,16 @@ export default function TravelDetailsScreen() {
   const [flightInfo, setFlightInfo] = useState('');
   const [availability, setAvailability] = useState<'yes' | 'maybe'>('yes');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const locationSheetRef = useRef<{ open: () => void; close: () => void }>(null);
   const router = useRouter();
   const location = useLocation();
+  const { locationLabel, coordinates } = useLocationContext();
+  const { openLocationSelector } = usePackageLocation();
+
+  // Debug location data
+  useEffect(() => {
+    console.log('Travel form location data updated:', { locationLabel, coordinates });
+  }, [locationLabel, coordinates]);
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(Platform.OS === 'ios');
@@ -67,11 +78,24 @@ export default function TravelDetailsScreen() {
       Alert.alert('Error', 'Please enter flight information');
       return false;
     }
-    if (!location.latitude || !location.longitude) {
-      Alert.alert('Error', 'Please allow location access');
+    if (!locationLabel && !coordinates) {
+      Alert.alert('Error', 'Please select a location');
+      return false;
+    }
+    if (location.errorMsg) {
+      Alert.alert('Error', 'Location permission is required');
       return false;
     }
     return true;
+  };
+
+  const handleLocationFieldPress = () => {
+    locationSheetRef.current?.open();
+  };
+
+  const handleLocationOption = (option: 'current' | 'search') => {
+    locationSheetRef.current?.close();
+    openLocationSelector(option);
   };
 
   const handleSubmit = async () => {
@@ -85,9 +109,11 @@ export default function TravelDetailsScreen() {
         toCountry,
         departureDate: departureDate.toISOString().split('T')[0],
         flightInfo,
-        lat_coordinates: location.latitude,
-        long_coordinates: location.longitude,
+        lat_coordinates: (coordinates?.lat || location.latitude).toString(),
+        long_coordinates: (coordinates?.lng || location.longitude).toString(),
       });
+
+      console.log('Submitting trip with location:', locationLabel, coordinates);
 
       if (response) {
         Alert.alert(
@@ -215,6 +241,15 @@ export default function TravelDetailsScreen() {
             </View>
 
             <View style={styles.formGroup}>
+              <Text style={styles.label}>Location <Text style={styles.required}>*</Text></Text>
+              <TouchableOpacity style={styles.dateInput} onPress={handleLocationFieldPress}>
+                <Text style={styles.dateText} numberOfLines={1} ellipsizeMode="tail">
+                  {locationLabel || 'Select location'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.formGroup}>
               <Text style={styles.label}>
                 Flight Information <Text style={styles.required}>*</Text>
               </Text>
@@ -279,6 +314,43 @@ export default function TravelDetailsScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Location Options Bottom Sheet */}
+      <RBSheet
+        ref={locationSheetRef}
+        height={220}
+        openDuration={250}
+        customStyles={{
+          container: {
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            padding: 0,
+            backgroundColor: Colors.secondary,
+          },
+        }}
+        draggable={true}
+        closeOnPressMask={true}
+      >
+        <View style={styles.sheetContainer}>
+          <Text style={styles.sheetTitle}>Select Location</Text>
+          <TouchableOpacity 
+            style={[styles.sheetOption]}
+            onPress={() => handleLocationOption('current')}
+            activeOpacity={0.7}
+          >
+            <MapPin size={20} color={Colors.mainTheme} style={{ marginRight: 12 }} />
+            <Text style={styles.sheetOptionText}>Use my current Location</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.sheetOption}
+            onPress={() => handleLocationOption('search')}
+            activeOpacity={0.7}
+          >
+            <Search size={20} color={Colors.mainTheme} style={{ marginRight: 12 }} />
+            <Text style={styles.sheetOptionText}>Search Address</Text>
+          </TouchableOpacity>
+        </View>
+      </RBSheet>
     </View>
   );
 }
@@ -402,19 +474,22 @@ const styles = StyleSheet.create({
   },
   dateInput: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    height: 48,
+    minHeight: 48,
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: 8,
     paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: Colors.secondary,
   },
   dateText: {
     fontSize: 14,
     color: Colors.primary,
-    fontFamily: 'OpenSans_500Medium'
+    fontFamily: 'OpenSans_500Medium',
+    flex: 1,
+    lineHeight: 20,
   },
   radioGroup: {
     flexDirection: 'row',
@@ -464,5 +539,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 8,
     textAlign: 'center',
+  },
+  sheetContainer: {
+    paddingHorizontal: 0,
+    paddingTop: 16,
+    paddingBottom: 16,
+    backgroundColor: Colors.secondary,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  dragHandle: {
+    alignSelf: 'center',
+    width: 56,
+    height: 2,
+    borderRadius: 3,
+    backgroundColor: '#9D93CC',
+    marginBottom: 16,
+  },
+  sheetTitle: {
+    fontSize: 20,
+    fontFamily: 'OpenSans_600SemiBold',
+    color: Colors.primary,
+    marginLeft: 24,
+    marginBottom: 16,
+    textAlign: 'left',
+  },
+  sheetOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    backgroundColor: 'transparent',
+  },
+  sheetOptionActive: {
+    backgroundColor: '#F3F1FC', // light purple highlight
+  },
+  sheetOptionText: {
+    fontSize: 16,
+    color: Colors.primary,
+    fontFamily: 'OpenSans_500Medium',
   },
 });

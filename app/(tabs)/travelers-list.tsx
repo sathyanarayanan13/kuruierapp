@@ -22,7 +22,7 @@ import FlightIcon from '@/assets/svgs/FlightIcon';
 import MessageIcon from '@/assets/svgs/MessageIcon';
 import SendIcon from '@/assets/svgs/SendIcon';
 import React from 'react';
-import { getTrips, getMyShipments, initiateChat } from '@/utils/api';
+import { getTrips, getMyShipments, initiateChat, getValidCounts } from '@/utils/api';
 import { formatDate, formatTime } from '@/utils/dateUtils';
 import type { Trip, Shipment } from '@/utils/api';
 
@@ -70,17 +70,57 @@ export default function TravelersListScreen() {
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [initiateLoading, setInitiateLoading] = useState(false);
   const [initiateError, setInitiateError] = useState<string | null>(null);
+  const [validPackageCount, setValidPackageCount] = useState<number | null>(null);
+  const [validCountLoading, setValidCountLoading] = useState(true);
+  const [validCountError, setValidCountError] = useState<string | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState<Shipment | null>(null);
+  const [packages, setPackages] = useState<Shipment[]>([]);
+  const [packagesLoading, setPackagesLoading] = useState(false);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    fetchTrips();
+    fetchValidCounts();
   }, []);
 
-  const fetchTrips = async () => {
+  const fetchValidCounts = async () => {
+    try {
+      setValidCountLoading(true);
+      setValidCountError(null);
+      const { validPackageCount } = await getValidCounts();
+      setValidPackageCount(validPackageCount);
+    } catch (err) {
+      setValidCountError('Failed to check package status');
+    } finally {
+      setValidCountLoading(false);
+    }
+  };
+
+  const fetchPackages = async () => {
+    try {
+      setPackagesLoading(true);
+      const data = await getMyShipments();
+      const validPackages = data.filter(pkg => new Date(pkg.estimatedDeliveryDate) > new Date());
+      setPackages(validPackages);
+      
+      // Select the package with earliest estimatedDeliveryDate
+      if (validPackages.length > 0) {
+        const sortedPackages = validPackages.sort((a, b) => 
+          new Date(a.estimatedDeliveryDate).getTime() - new Date(b.estimatedDeliveryDate).getTime()
+        );
+        setSelectedPackage(sortedPackages[0]);
+      }
+    } catch (err) {
+      console.error('Error fetching packages:', err);
+    } finally {
+      setPackagesLoading(false);
+    }
+  };
+
+  const fetchTrips = async (destinationCountry?: string) => {
     try {
       setLoading(true);
       setError(null);
-      const data = await getTrips();
+      const data = await getTrips(destinationCountry);
       setTrips(data);
     } catch (err) {
       setError('Failed to fetch travelers list');
@@ -92,9 +132,16 @@ export default function TravelersListScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchTrips();
+      fetchValidCounts();
+      fetchPackages();
     }, [])
   );
+
+  useEffect(() => {
+    if (selectedPackage) {
+      fetchTrips(selectedPackage.destinationCountry);
+    }
+  }, [selectedPackage]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -106,6 +153,13 @@ export default function TravelersListScreen() {
 
   const handleApplyFilter = () => {
     setShowFilter(false);
+  };
+
+  const handlePackageChange = (packageId: string) => {
+    const package_ = packages.find(pkg => pkg.id === packageId);
+    if (package_) {
+      setSelectedPackage(package_);
+    }
   };
 
   const openPackageDrawer = async (tripId: string) => {
@@ -258,6 +312,50 @@ export default function TravelersListScreen() {
   );
 
   const renderContent = () => {
+    if (validCountLoading) {
+      return (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      );
+    }
+    if (validCountError) {
+      return (
+        <View style={styles.centerContainer}>
+          <Text style={styles.errorText}>{validCountError}</Text>
+        </View>
+      );
+    }
+    if (validPackageCount === 0) {
+      return (
+        <View style={styles.centerContainer}>
+          <Text style={styles.noDataText}>Please create a package to see the traveller</Text>
+          <TouchableOpacity
+            style={[styles.actionButton, { marginTop: 16 }]}
+            onPress={() => router.push('/(tabs)/package-detail')}
+          >
+            <Text style={styles.buttonText}>Go to Package List Form</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (packagesLoading) {
+      return (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      );
+    }
+
+    if (packages.length === 0) {
+      return (
+        <View style={styles.centerContainer}>
+          <Text style={styles.noDataText}>No valid packages found</Text>
+        </View>
+      );
+    }
+
     if (loading) {
       return (
         <View style={styles.centerContainer}>
@@ -277,7 +375,7 @@ export default function TravelersListScreen() {
     if (trips.length === 0) {
       return (
         <View style={styles.centerContainer}>
-          <Text style={styles.noDataText}>No travelers list found</Text>
+          <Text style={styles.noDataText}>No travelers found for this destination</Text>
         </View>
       );
     }
@@ -296,6 +394,8 @@ export default function TravelersListScreen() {
       </ScrollView>
     );
   };
+
+  const packageDropdownItems = packages.map(pkg => `${pkg.packageType} - ${pkg.destinationCountry}`);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -322,8 +422,25 @@ export default function TravelersListScreen() {
                 <FilterIcon width={32} height={32} color="#5059A5" />
               </TouchableOpacity>
             </View>
+            {/* Package Selection Dropdown */}
+            {packages.length > 0 && validPackageCount && validPackageCount > 0 && (
+              <View style={styles.packageDropdownContainer}>
+                <Dropdown
+                  value={selectedPackage ? `${selectedPackage.packageType} - ${selectedPackage.destinationCountry}` : ''}
+                  items={packageDropdownItems}
+                  onChange={(selectedLabel) => {
+                    const package_ = packages.find(pkg => `${pkg.packageType} - ${pkg.destinationCountry}` === selectedLabel);
+                    if (package_) {
+                      setSelectedPackage(package_);
+                    }
+                  }}
+                  placeholder="Choose a package"
+                />
+              </View>
+            )}
           </ImageBackground>
         </View>
+
         {renderContent()}
 
         <Modal
@@ -509,7 +626,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    marginTop: -120,
+    marginTop: -60,
   },
   scrollContent: {
     padding: 8,
@@ -636,6 +753,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.mainTheme,
     fontFamily: 'OpenSans_500Medium',
+    paddingHorizontal: 10,
   },
   buttonTextInvite: {
     fontSize: 14,
@@ -713,5 +831,18 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontSize: 16,
     fontFamily: 'OpenSans_500Medium',
+  },
+  packageDropdownContainer: {
+    backgroundColor: 'transparent',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  packageDropdownLabel: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontFamily: 'OpenSans_500Medium',
+    marginBottom: 8,
   },
 });

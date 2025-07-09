@@ -7,11 +7,12 @@ import {
   ImageBackground,
   Image,
   Alert,
+  Modal,
 } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Camera, Image as ImageIcon, ChevronLeft } from 'lucide-react-native';
+import { Camera, Image as ImageIcon, ChevronLeft, MapPin, Search } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Text from '@/components/Text';
 import Colors from '@/constants/Colors';
@@ -20,7 +21,11 @@ import FileDownload from '@/assets/svgs/FileDownload';
 import DatePicker from '@/assets/svgs/DatePicker';
 import { useLocation } from '@/hooks/useLocation';
 import { useImagePicker } from '@/hooks/useImagePicker';
+import { usePackageLocation } from '@/hooks/usePackageLocation';
+import { useLocationContext } from '@/utils/LocationContext';
 import { createShipment } from '@/utils/api';
+import RBSheet from 'react-native-raw-bottom-sheet';
+import { useRef, useEffect } from 'react';
 
 const packageTypes = ['DOCUMENTS', 'SNACKS', 'CLOTHES', 'ELECTRONICS', 'OTHER'];
 const weights = ['0.5', '1', '1.5', '2.5'];
@@ -33,11 +38,19 @@ export default function PackageDetailsScreen() {
   const [weight, setWeight] = useState('');
   const [country, setCountry] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const locationSheetRef = useRef<{ open: () => void; close: () => void }>(null);
   const router = useRouter();
 
   // Use custom hooks
   const { latitude, longitude, errorMsg: locationError } = useLocation();
   const { image, error: imageError, pickImage, takePhoto } = useImagePicker();
+  const { locationLabel, coordinates } = useLocationContext();
+  const { openLocationSelector } = usePackageLocation();
+
+  // Debug location data
+  useEffect(() => {
+    console.log('Location data updated:', { locationLabel, coordinates });
+  }, [locationLabel, coordinates]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -71,11 +84,24 @@ export default function PackageDetailsScreen() {
       Alert.alert('Error', 'Please upload package image');
       return false;
     }
+    if (!locationLabel && !coordinates) {
+      Alert.alert('Error', 'Please select a location');
+      return false;
+    }
     if (locationError) {
       Alert.alert('Error', 'Location permission is required');
       return false;
     }
     return true;
+  };
+
+  const handleLocationFieldPress = () => {
+    locationSheetRef.current?.open();
+  };
+
+  const handleLocationOption = (option: 'current' | 'search') => {
+    locationSheetRef.current?.close();
+    openLocationSelector(option);
   };
 
   const handleSubmit = async () => {
@@ -89,11 +115,13 @@ export default function PackageDetailsScreen() {
         estimatedDeliveryDate: deliveryDate.toISOString().split('T')[0],
         weightGrams: parseFloat(weight) * 1000, // Convert kg to grams
         destinationCountry: country,
-        lat_coordinates: latitude,
-        long_coordinates: longitude,
+        lat_coordinates: (coordinates?.lat || latitude).toString(),
+        long_coordinates: (coordinates?.lng || longitude).toString(),
         packageImage: image,
+        locationLabel: locationLabel || '',
       };
 
+      console.log('Submitting shipment with location:', locationLabel, coordinates);
       await createShipment(shipmentData);
       
       // Navigate back and trigger refresh
@@ -227,6 +255,16 @@ export default function PackageDetailsScreen() {
                 )}
               </View>
             </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Location <Text style={styles.required}>*</Text></Text>
+              <TouchableOpacity style={styles.dateInput} onPress={handleLocationFieldPress}>
+                <Text style={styles.dateText} numberOfLines={1} ellipsizeMode="tail">
+                  {locationLabel || 'Select location'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
           </View>
 
           <TouchableOpacity 
@@ -240,6 +278,43 @@ export default function PackageDetailsScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Location Options Bottom Sheet */}
+      <RBSheet
+        ref={locationSheetRef}
+        height={220}
+        openDuration={250}
+        customStyles={{
+          container: {
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            padding: 0,
+            backgroundColor: Colors.secondary,
+          },
+        }}
+        draggable={true}
+        closeOnPressMask={true}
+      >
+        <View style={styles.sheetContainer}>
+          <Text style={styles.sheetTitle}>Select Location</Text>
+          <TouchableOpacity 
+            style={[styles.sheetOption]}
+            onPress={() => handleLocationOption('current')}
+            activeOpacity={0.7}
+          >
+            <MapPin size={20} color={Colors.mainTheme} style={{ marginRight: 12 }} />
+            <Text style={styles.sheetOptionText}>Use my current Location</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.sheetOption}
+            onPress={() => handleLocationOption('search')}
+            activeOpacity={0.7}
+          >
+            <Search size={20} color={Colors.mainTheme} style={{ marginRight: 12 }} />
+            <Text style={styles.sheetOptionText}>Search Address</Text>
+          </TouchableOpacity>
+        </View>
+      </RBSheet>
     </View>
   );
 }
@@ -347,19 +422,22 @@ const styles = StyleSheet.create({
   },
   dateInput: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    height: 48,
+    minHeight: 48,
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: 8,
     paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: Colors.secondary,
   },
   dateText: {
     fontSize: 14,
     color: Colors.primary,
     fontFamily: 'OpenSans_500Medium',
+    flex: 1,
+    lineHeight: 20,
   },
   imageUpload: {
     gap: 12,
@@ -422,6 +500,87 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.7,
+  },
+  modal: {
+    justifyContent: 'flex-end',
+    margin: 0,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    backgroundColor: Colors.secondary,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingTop: 16,
+    maxHeight: '70%',
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: Colors.border,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  modalHeader: {
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    textAlign: 'center',
+  },
+  modalOption: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    marginBottom: 12,
+  },
+  modalOptionText: {
+    fontSize: 16,
+    color: Colors.primary,
+  },
+  sheetContainer: {
+    paddingHorizontal: 0,
+    paddingTop: 16,
+    paddingBottom: 16,
+    backgroundColor: Colors.secondary,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  dragHandle: {
+    alignSelf: 'center',
+    width: 56,
+    height: 2,
+    borderRadius: 3,
+    backgroundColor: '#9D93CC',
+    marginBottom: 16,
+  },
+  sheetTitle: {
+    fontSize: 20,
+    fontFamily: 'OpenSans_600SemiBold',
+    color: Colors.primary,
+    marginLeft: 24,
+    marginBottom: 16,
+    textAlign: 'left',
+  },
+  sheetOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    backgroundColor: 'transparent',
+  },
+  sheetOptionActive: {
+    backgroundColor: '#F3F1FC', // light purple highlight
+  },
+  sheetOptionText: {
+    fontSize: 16,
+    color: Colors.primary,
+    fontFamily: 'OpenSans_500Medium',
   },
 });
 

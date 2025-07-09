@@ -64,6 +64,7 @@ export default function ChatScreen() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [paymentStatusLoading, setPaymentStatusLoading] = useState(true);
   
   // WebSocket states
   const [isConnected, setIsConnected] = useState(false);
@@ -126,6 +127,7 @@ export default function ChatScreen() {
     
     try {
       setInitialLoading(true);
+      setPaymentStatusLoading(true);
       setLoadingMessages(true);
       setErrorMessages(null);
       
@@ -151,8 +153,10 @@ export default function ChatScreen() {
       setChatAccess(chatData.chatAccess);
       setCanSendFreeText(chatData.canSendFreeText);
       
-      // Check if chat is already paid/unlocked
-      setIsPaid(chatData.chatAccess.unlockedByPayment);
+      // Check if chat is already paid/unlocked - set this immediately
+      const isChatPaid = chatData.chatAccess.unlockedByPayment;
+      setIsPaid(isChatPaid);
+      setPaymentStatusLoading(false);
       
       // Set other user name
       const otherUser = chatData.messages.find(msg => msg.senderId !== user?.id)?.sender;
@@ -444,6 +448,33 @@ export default function ChatScreen() {
     };
   }, [matchId]);
 
+  // Show loading screen while checking payment status
+  if (initialLoading || paymentStatusLoading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
+        <View style={styles.container}>
+          <ChatHeader
+            isGroupChat={isGroupChat}
+            onBack={handleBack}
+            onInvite={() => setShowInviteDrawer(true)}
+            onDeliveryInfo={() => router.push('/package-delivery')}
+            onShowMembers={() => setShowMembersDrawer(true)}
+            isPaid={isPaid}
+            isConnected={isConnected}
+            isTyping={isTyping}
+            typingUsers={typingUsers}
+            onlineUsers={onlineUsers}
+            otherUserName={otherUserName}
+          />
+          
+          <View style={styles.loadingContainer}>
+            <LoadingSpinner size={40} />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={styles.container}>
@@ -481,11 +512,10 @@ export default function ChatScreen() {
           style={{ flex: 1, padding: 16 }}
           imageStyle={{ borderRadius: 16 }}
         >
-          {initialLoading ? (
-            <LoadingSpinner />
-          ) : loadingMessages ? (
+          {loadingMessages ? (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-              <Text>Loading messages...</Text>
+              <LoadingSpinner size={40} />
+              <Text style={styles.loadingText}>Loading messages...</Text>
             </View>
           ) : errorMessages ? (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -581,6 +611,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: Colors.primary,
+    fontFamily: 'OpenSans_500Medium',
   },
   flightStatus: {
     backgroundColor: '#242A62',

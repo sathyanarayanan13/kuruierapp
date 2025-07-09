@@ -11,6 +11,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sathya131626.kuruier",
+      "config": {
+        "googleMapsApiKey": "AIzaSyBYSysjlRcnpSWE-wz7JXbiDQFhUU3S2iM"
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "We need your location to track package delivery locations",
         "NSLocationAlwaysUsageDescription": "We need your location to track package delivery locations",
@@ -62,6 +65,11 @@
       "package": "com.sathya131626.kuruier",
       "version": "1.0.5",
       "versionCode": 5,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBYSysjlRcnpSWE-wz7JXbiDQFhUU3S2iM"
+        }
+      },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
