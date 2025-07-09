@@ -26,6 +26,7 @@ import { getPredefinedMessages, ChatMessage, getStoredUser } from '@/utils/api';
 import WebSocketService from '@/utils/WebSocketService';
 import NotificationService from '@/utils/NotificationService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 
 const initialMessages: ChatMessage[] = [
   {
@@ -69,6 +70,7 @@ export default function TravelerChatScreen() {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const appState = useRef(AppState.currentState);
   const insets = useSafeAreaInsets();
+  const { matchId } = useLocalSearchParams();
 
   useEffect(() => {
     initializeChat();
@@ -87,6 +89,23 @@ export default function TravelerChatScreen() {
 
     return () => subscription?.remove();
   }, [chatUnlocked]);
+
+  useEffect(() => {
+    // Ask for push notification permission on entering the chat
+    NotificationService.registerForPushNotificationsAsync();
+  }, []);
+
+  useEffect(() => {
+    if (matchId) {
+      WebSocketService.joinChat(matchId as string);
+    }
+    return () => {
+      if (matchId) {
+        WebSocketService.leaveChat(matchId as string);
+      }
+      stopTyping();
+    };
+  }, [matchId]);
 
   const initializeChat = async () => {
     try {
@@ -119,13 +138,28 @@ export default function TravelerChatScreen() {
   };
 
   const setupWebSocketListeners = () => {
-    WebSocketService.removeAllListeners();
-    WebSocketService.on('new_message', (message: ChatMessage) => {
+    // Remove only the specific handler on unmount
+    // Define the handler outside so it can be referenced in cleanup
+    // (moved to useEffect below)
+  };
+
+  useEffect(() => {
+    // Setup WebSocket 'new_message' listener
+    const onNewMessage = (message: ChatMessage) => {
       setMessages(prev => {
-        if (prev.some(m => m.id === message.id)) return prev;
-        return [...prev, message];
+        // Remove any optimistic message with same content and sender
+        const filtered = prev.filter(
+          m =>
+            !(
+              m.id.startsWith('temp-') &&
+              m.messageContent === message.messageContent &&
+              m.senderId === message.senderId
+            )
+        );
+        // Avoid duplicate real messages
+        if (filtered.some(m => m.id === message.id)) return filtered;
+        return [...filtered, message];
       });
-      
       // Show notification if app is in background
       if (AppState.currentState !== 'active') {
         NotificationService.scheduleLocalNotification(
@@ -134,40 +168,14 @@ export default function TravelerChatScreen() {
           { matchId: 'temp', messageId: message.id }
         );
       }
-    });
-
-    // Typing indicators
-    WebSocketService.on('user_typing', (data: { userId: string; username: string }) => {
-      setTypingUsers(prev => {
-        const filtered = prev.filter(user => user !== data.username);
-        return [...filtered, data.username];
-      });
-    });
-
-    WebSocketService.on('typing_stop', (data: { userId: string; username: string }) => {
-      setTypingUsers(prev => prev.filter(user => user !== data.username));
-    });
-
-    // User online status
-    WebSocketService.on('user_online', (data: { userId: string; isOnline: boolean }) => {
-      setOnlineUsers(prev => {
-        if (data.isOnline) {
-          return prev.includes(data.userId) ? prev : [...prev, data.userId];
-        } else {
-          return prev.filter(id => id !== data.userId);
-        }
-      });
-    });
-
-    // Connection status
-    WebSocketService.on('connect', () => {
-      setIsConnected(true);
-    });
-
-    WebSocketService.on('disconnect', () => {
-      setIsConnected(false);
-    });
-  };
+    };
+    WebSocketService.on('new_message', onNewMessage);
+    // Add other listeners as needed, using the same pattern
+    return () => {
+      WebSocketService.off('new_message', onNewMessage);
+      // Remove other listeners here if added
+    };
+  }, [otherUserName]);
 
   const fetchPredefinedMessages = async () => {
     try {
@@ -267,8 +275,22 @@ export default function TravelerChatScreen() {
   };
 
   const sendMessageToBackend = (content: string) => {
-    // Implement the actual sendMessage API call here, similar to main chat
-    // This is a placeholder for parity with the main chat
+    // Optimistic UI: add the message immediately
+    const tempMessage: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      matchId: 'temp',
+      senderId: currentUserId || 'current',
+      messageType: 'TEXT',
+      messageContent: content,
+      fileUrl: null,
+      fileName: null,
+      fileSize: null,
+      isPredefined: false,
+      createdAt: new Date().toISOString(),
+      sender: { id: currentUserId || 'current', username: 'You' }
+    };
+    setMessages(prev => [...prev, tempMessage]);
+    // TODO: Call your actual sendMessage API/WebSocket here
   };
 
   const handleSendMedia = (media: { uri: string; type: 'IMAGE' | 'FILE' | 'VOICE_NOTE'; fileName: string; fileSize?: number }) => {

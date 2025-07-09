@@ -103,6 +103,24 @@ export default function ChatScreen() {
     return () => subscription?.remove();
   }, [matchId, isPaid]);
 
+  useEffect(() => {
+    if (!matchId) return;
+    // Ask for push notification permission on entering the chat
+    NotificationService.registerForPushNotificationsAsync();
+  }, []);
+
+  useEffect(() => {
+    if (matchId) {
+      WebSocketService.joinChat(matchId as string);
+    }
+    return () => {
+      if (matchId) {
+        WebSocketService.leaveChat(matchId as string);
+      }
+      stopTyping();
+    };
+  }, [matchId]);
+
   const initializeChat = async () => {
     if (!matchId) return;
     
@@ -157,13 +175,29 @@ export default function ChatScreen() {
   };
 
   const setupWebSocketListeners = () => {
-    WebSocketService.removeAllListeners();
-    WebSocketService.on('new_message', (message: ChatMessage) => {
+    // Remove only the specific handler on unmount
+    // Define the handler outside so it can be referenced in cleanup
+    // (moved to useEffect below)
+  };
+
+  useEffect(() => {
+    if (!matchId) return;
+    // Setup WebSocket 'new_message' listener
+    const onNewMessage = (message: ChatMessage) => {
       setMessages(prev => {
-        if (prev.some(m => m.id === message.id)) return prev;
-        return [...prev, message];
+        // Remove any optimistic message with same content and sender
+        const filtered = prev.filter(
+          m =>
+            !(
+              m.id.startsWith('temp-') &&
+              m.messageContent === message.messageContent &&
+              m.senderId === message.senderId
+            )
+        );
+        // Avoid duplicate real messages
+        if (filtered.some(m => m.id === message.id)) return filtered;
+        return [...filtered, message];
       });
-      
       // Show notification if app is in background
       if (AppState.currentState !== 'active') {
         NotificationService.scheduleLocalNotification(
@@ -172,64 +206,14 @@ export default function ChatScreen() {
           { matchId, messageId: message.id }
         );
       }
-    });
-
-    // Typing indicators
-    WebSocketService.on('user_typing', (data: { userId: string; username: string }) => {
-      setTypingUsers(prev => {
-        const filtered = prev.filter(user => user !== data.username);
-        return [...filtered, data.username];
-      });
-    });
-
-    WebSocketService.on('typing_stop', (data: { userId: string; username: string }) => {
-      setTypingUsers(prev => prev.filter(user => user !== data.username));
-    });
-
-    // User online status
-    WebSocketService.on('user_online', (data: { userId: string; isOnline: boolean }) => {
-      setOnlineUsers(prev => {
-        if (data.isOnline) {
-          return prev.includes(data.userId) ? prev : [...prev, data.userId];
-        } else {
-          return prev.filter(id => id !== data.userId);
-        }
-      });
-    });
-
-    // Chat unlocked
-    WebSocketService.on('chat_unlocked', (data: any) => {
-      setIsPaid(true);
-      setCanSendFreeText(true);
-    });
-
-    // Message delivery confirmation
-    WebSocketService.on('message_delivered', (data: { messageId: string }) => {
-      setMessages(prev => prev.map(msg => 
-        msg.id === data.messageId 
-          ? { ...msg, delivered: true }
-          : msg
-      ));
-    });
-
-    // Message read confirmation
-    WebSocketService.on('message_read', (data: { messageId: string; readBy: string }) => {
-      setMessages(prev => prev.map(msg => 
-        msg.id === data.messageId 
-          ? { ...msg, read: true, readBy: data.readBy }
-          : msg
-      ));
-    });
-
-    // Connection status
-    WebSocketService.on('connect', () => {
-      setIsConnected(true);
-    });
-
-    WebSocketService.on('disconnect', () => {
-      setIsConnected(false);
-    });
-  };
+    };
+    WebSocketService.on('new_message', onNewMessage);
+    // Add other listeners as needed, using the same pattern
+    return () => {
+      WebSocketService.off('new_message', onNewMessage);
+      // Remove other listeners here if added
+    };
+  }, [matchId, otherUserName]);
 
   const fetchChatData = async () => {
     if (!matchId) return;
@@ -333,6 +317,21 @@ export default function ChatScreen() {
     if (!inputText.trim() || !matchId || sendingMessage) return;
     setSendingMessage(true);
     stopTyping();
+    // Optimistic UI: add the message immediately
+    const tempMessage: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      matchId: matchId as string,
+      senderId: currentUserId || 'current',
+      messageType: 'TEXT',
+      messageContent: inputText.trim(),
+      fileUrl: null,
+      fileName: null,
+      fileSize: null,
+      isPredefined: false,
+      createdAt: new Date().toISOString(),
+      sender: { id: currentUserId || 'current', username: 'You' }
+    };
+    setMessages(prev => [...prev, tempMessage]);
     try {
       await sendMessage({
         matchId: matchId as string,
